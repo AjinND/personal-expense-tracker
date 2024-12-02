@@ -1,7 +1,52 @@
+"use client";
+
 import { Calendar, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { useEffect, useState } from "react";
 
-const ExpenseSummary = ( {totalExpenses, averageSpending, budgetRemaining, timeFrame} ) => (
+interface ExpenseSummaryProps {
+  totalExpenses: number;
+  averageSpending: number;
+  budgetRemaining: (remainingBudget: number) => void;
+  timeFrame: string;
+  remainingBudget: number;
+}
+
+const ExpenseSummary: React.FC<ExpenseSummaryProps> = ({
+  totalExpenses,
+  averageSpending,
+  budgetRemaining,
+  timeFrame,
+  remainingBudget,
+}) => {
+  const [totalBalance, setTotalBalance] = useState(0.0);
+  const [newBudget, setNewBudget] = useState(totalBalance.toString());
+
+  const handleBudgetSave = () => {
+    const parsedBudget = parseFloat(newBudget);
+    if (!isNaN(parsedBudget) && parsedBudget >= 0) {
+      setTotalBalance(parsedBudget);
+      budgetRemaining(parsedBudget);
+    }
+  };
+
+  // useEffect(() => {
+  //   setNewBudget(totalBalance.toString());
+  // }, [totalBalance]);
+
+  return (
     <div className="grid grid-cols-3 gap-4 mb-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -10,7 +55,7 @@ const ExpenseSummary = ( {totalExpenses, averageSpending, budgetRemaining, timeF
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">${totalExpenses.toFixed(2)}</div>
-          <p className="text-xs text-green-500">+12.5% from last month</p>
+          {/* <p className="text-xs text-green-500">+12.5% from last month</p> */}
         </CardContent>
       </Card>
       <Card>
@@ -21,7 +66,9 @@ const ExpenseSummary = ( {totalExpenses, averageSpending, budgetRemaining, timeF
           <Calendar className="text-muted-foreground" size={20} />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">${averageSpending.toFixed(2)}</div>
+          <div className="text-2xl font-bold">
+            ${averageSpending.toFixed(2)}
+          </div>
           <p className="text-xs text-muted-foreground">Per {timeFrame}</p>
         </CardContent>
       </Card>
@@ -30,14 +77,57 @@ const ExpenseSummary = ( {totalExpenses, averageSpending, budgetRemaining, timeF
           <CardTitle className="text-sm font-medium">
             Budget Remaining
           </CardTitle>
-          <Wallet className="text-muted-foreground" size={20} />
+          <Dialog>
+            <DialogTrigger asChild>
+              <button className="bg-transparent border-none cursor-pointer">
+                <Wallet
+                  className="text-muted-foreground hover:text-primary"
+                  size={20}
+                  color="blue"
+                />
+              </button>
+            </DialogTrigger>
+            <DialogContent aria-describedby="">
+              <DialogHeader>
+                <DialogTitle>Update Monthly Budget</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="budget" className="text-right">
+                    Amount
+                  </Label>
+                  <Input
+                    id="budget"
+                    value={newBudget}
+                    onChange={(e) => setNewBudget(e.target.value)}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="col-span-3"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleBudgetSave}
+                  >
+                    Save
+                  </Button>
+                </DialogClose>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">${budgetRemaining.toFixed(2)}</div>
+          <div className="text-2xl font-bold">${remainingBudget.toFixed(2)}</div>
           <p className="text-xs text-muted-foreground">Monthly budget</p>
         </CardContent>
       </Card>
     </div>
   );
+};
 
-  export default ExpenseSummary;
+export default ExpenseSummary;

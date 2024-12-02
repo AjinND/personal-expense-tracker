@@ -18,12 +18,22 @@ import ExpenseSummary from "@/components/expenseSummary/summary";
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { endOfWeek, startOfWeek } from "date-fns";
+import CategoryCards from "@/components/categories/categoryCards";
 
 // Mock expense data (replace with actual data source)
 const mockExpenseData = mockData;
 
+// Types defined
+type ExpenseEntry = {
+  date: string;
+  food: number;
+  shopping: number;
+  travelling: number;
+  entertainment: number;
+};
+
 // Category colors
-const CATEGORY_COLORS = {
+const CATEGORY_COLORS: { [key: string]: string } = {
   food: "#FF6384",
   shopping: "#36A2EB",
   travelling: "#FFCE56",
@@ -31,21 +41,18 @@ const CATEGORY_COLORS = {
 };
 
 const ExpenseDashboard = () => {
-  // const [timeframe, setTimeframe] = useState("weekly");
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   useEffect(() => {
     const today = new Date();
-  const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 0 }); // Sunday
-  const endOfCurrentWeek = endOfWeek(today, { weekStartsOn: 0 }); // Saturday
-  setDateRange({from: startOfCurrentWeek,
-    to: endOfCurrentWeek,})
-
-  }, [])
+    const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 0 });
+    const endOfCurrentWeek = endOfWeek(today, { weekStartsOn: 0 });
+    setDateRange({ from: startOfCurrentWeek, to: endOfCurrentWeek });
+  }, []);
 
   // Filter expense data based on selected date range
   const filteredExpenseData = useMemo(() => {
-    console.log('da', dateRange)
+    // console.log("da", dateRange);
     if (!dateRange || !dateRange.from || !dateRange.to) return [];
 
     const startDate = new Date(dateRange.from);
@@ -59,12 +66,21 @@ const ExpenseDashboard = () => {
 
   // Calculate total expenses for each category
   const categoryTotals = useMemo(() => {
-    const totals = { food: 0, shopping: 0, travelling: 0, entertainment: 0 };
-    filteredExpenseData.forEach((entry) => {
-      Object.keys(totals).forEach((category) => {
-        totals[category] += entry[category] || 0;
-      });
+    const totals: Record<keyof Omit<ExpenseEntry, "date">, number> = {
+      food: 0,
+      shopping: 0,
+      travelling: 0,
+      entertainment: 0,
+    };
+
+    filteredExpenseData.forEach((entry: ExpenseEntry) => {
+      (Object.keys(totals) as Array<keyof typeof totals>).forEach(
+        (category) => {
+          totals[category] += entry[category];
+        }
+      );
     });
+
     return totals;
   }, [filteredExpenseData]);
 
@@ -74,14 +90,34 @@ const ExpenseDashboard = () => {
     [categoryTotals]
   );
 
+  const numberOfDaysBetweenDates = useMemo(() => {
+    if (!dateRange || !dateRange.from || !dateRange.to) return 0;
+
+    const startDate = new Date(dateRange?.from);
+    const endDate = new Date(dateRange?.to);
+    const timeDiff = endDate.getTime() - startDate.getTime();
+    const days = timeDiff / (1000 * 60 * 60 * 24);
+
+    return Math.ceil(days);
+  }, [dateRange]);
+
   // Calculate average spending
-  const averageSpending = useMemo(
-    () => totalExpenses / (filteredExpenseData.length || 1),
-    [totalExpenses, filteredExpenseData]
-  );
+  const averageSpending = useMemo(() => {
+    const average = totalExpenses / (numberOfDaysBetweenDates || 1);
+    // console.log(" hgsjc ", numberOfDaysBetweenDates);
+    return average;
+  }, [totalExpenses, filteredExpenseData]);
 
   // Calculate budget remaining
-  const budgetRemaining = 10068.11 - totalExpenses;
+  const [totalBalance, setTotalBalance] = useState(0.0);
+  const remainingBudget = useMemo(
+    () => totalBalance - totalExpenses,
+    [totalBalance, totalExpenses]
+  );
+
+  const getRemainingBudget = (newBudget: number) => {
+    setTotalBalance(newBudget);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -91,30 +127,16 @@ const ExpenseDashboard = () => {
         <ExpenseSummary
           totalExpenses={totalExpenses}
           averageSpending={averageSpending}
-          budgetRemaining={budgetRemaining}
-          timeFrame={"daily"}
+          budgetRemaining={getRemainingBudget}
+          remainingBudget={remainingBudget}
+          timeFrame={"day"}
         />
 
         {/* Category Summary Cards */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          {Object.entries(categoryTotals).map(([category, total]) => (
-            <Card key={category}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium capitalize">
-                  {category}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div
-                  className="text-2xl font-bold"
-                  style={{ color: CATEGORY_COLORS[category] }}
-                >
-                  ${total.toLocaleString()}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <CategoryCards
+          categoryTotals={categoryTotals}
+          categoryColors={CATEGORY_COLORS}
+        />
 
         {/* Expense Categories Chart */}
         <Card>
@@ -124,7 +146,9 @@ const ExpenseDashboard = () => {
               <DatePickerWithRange
                 value={dateRange}
                 onChange={setDateRange}
-                formatDate={(date) => date.toLocaleDateString()}
+                formatDate={(date: { toLocaleDateString: () => string }) =>
+                  date.toLocaleDateString()
+                }
               />
             </div>
           </CardHeader>

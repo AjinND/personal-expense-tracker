@@ -71,14 +71,14 @@ const mockData = [
   },
   { 
     date: '2024-12-03', 
-    food: 75, 
-    shopping: 55, 
-    travelling: 45, 
+    food: 45, 
+    shopping: 105, 
+    travelling: 55, 
     entertainment: 25 
   },
   { 
     date: '2024-12-04', 
-    food: 80, 
+    food: 50, 
     shopping: 60, 
     travelling: 50, 
     entertainment: 30 
