@@ -1,6 +1,6 @@
-import { BarChart, Settings, User, Wallet } from "lucide-react";
+import { BarChart, LogOut, Settings, User, Wallet } from "lucide-react";
 
-const Navigation = () => (
+const Navigation: React.FC<{ user: { name: string }; onLogout: () => void }> = ({user, onLogout}) => (
   <nav className="bg-white shadow-md">
     <div className="container mx-auto flex justify-between items-center p-4">
       <div className="flex items-center space-x-2">
@@ -18,13 +18,14 @@ const Navigation = () => (
           href="#"
           className="flex items-center text-gray-600 hover:text-blue-600"
         >
-          <User className="mr-2" size={20} /> Profile
+          <User className="mr-2" size={20} /> {user.name}
         </a>
         <a
-          href="#"
+          // href="#"
           className="flex items-center text-gray-600 hover:text-blue-600"
+          onClick={() => onLogout()}
         >
-          <Settings className="mr-2" size={20} /> Settings
+          <LogOut className="mr-2" size={20} /> Logout
         </a>
       </div>
     </div>

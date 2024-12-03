@@ -28,6 +28,11 @@ type ExpenseEntry = {
 interface CategoryCardsProps {
   categoryTotals: Record<keyof Omit<ExpenseEntry, "date">, number>;
   categoryColors: { [key: string]: string };
+  addExpense: (
+    category: keyof Omit<ExpenseEntry, "date">,
+    amount: number,
+    date: string
+  ) => void;
 }
 
 const CATEGORY_ICONS: { [key: string]: React.ElementType } = {
@@ -40,9 +45,12 @@ const CATEGORY_ICONS: { [key: string]: React.ElementType } = {
 const CategoryCards: React.FC<CategoryCardsProps> = ({
   categoryTotals,
   categoryColors,
+  addExpense,
 }) => {
   const [amountSpend, setAmountSpend] = useState("0");
-  // const [category, setCategory] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<
+    keyof Omit<ExpenseEntry, "date"> | null
+  >(null);
   const [expenseDate, setExpenseDate] = useState<Date | undefined>(new Date());
 
   const setSelectedDate = (
@@ -53,7 +61,21 @@ const CategoryCards: React.FC<CategoryCardsProps> = ({
   };
 
   const handleExpenseSave = () => {
-    console.log("Amount Spend + Expense Date ", amountSpend, expenseDate);
+    console.log(
+      "Amount Spend + Expense Date ",
+      selectedCategory,
+      amountSpend,
+      expenseDate?.toLocaleDateString("en-CA")
+    );
+    // saveData(amountSpend, expenseDate?.toISOString().split("T")[0]);
+    if (selectedCategory && expenseDate) {
+      addExpense(
+        selectedCategory,
+        parseFloat(amountSpend),
+        // expenseDate.toISOString().split("T")[0]
+        expenseDate.toLocaleDateString("en-CA")
+      );
+    }
     setAmountSpend("0");
   };
 
@@ -70,7 +92,14 @@ const CategoryCards: React.FC<CategoryCardsProps> = ({
               </CardTitle>
               <Dialog>
                 <DialogTrigger asChild>
-                  <button className="bg-transparent border-none cursor-pointer">
+                  <button
+                    className="bg-transparent border-none cursor-pointer"
+                    onClick={() =>
+                      setSelectedCategory(
+                        category as keyof Omit<ExpenseEntry, "date">
+                      )
+                    }
+                  >
                     {IconComponent && (
                       <IconComponent
                         className="text-muted-foreground hover:text-primary"
