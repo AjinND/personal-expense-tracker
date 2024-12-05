@@ -120,10 +120,20 @@ const ExpenseDashboard: React.FC<{
             // Update existing entry
             const updatedData = [...prevData];
             updatedData[index] = updatedEntry;
-            return updatedData;
+            const sortedExpenseData = updatedData.sort(
+              (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+            );
+            // console.log("Sorted1 ", sortedExpenseData);
+            return sortedExpenseData;
+            // return updatedData;
           } else {
             // Add new entry
-            return [...prevData, updatedEntry];
+            const sortedExpenseData = [...prevData, updatedEntry].sort(
+              (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+            );
+            // console.log("Sorted2 ", sortedExpenseData);
+            return sortedExpenseData;
+            // return [...prevData, updatedEntry];
           }
         });
       } else {
@@ -136,7 +146,7 @@ const ExpenseDashboard: React.FC<{
 
   // Filter expense data based on selected date range
   const filteredExpenseData = useMemo(() => {
-    console.log("da", expenseData);
+    // console.log("da", expenseData);
     if (!dateRange || !dateRange.from || !dateRange.to) return [];
 
     const startDate = new Date(dateRange.from);
