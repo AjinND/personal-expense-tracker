@@ -19,9 +19,7 @@ import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { endOfWeek, startOfWeek } from "date-fns";
 import CategoryCards from "@/components/categories/categoryCards";
-
-// Mock expense data (replace with actual data source)
-// const mockExpenseData = mockData;
+import axios from "axios";
 
 // Types defined
 type ExpenseEntry = {
@@ -40,12 +38,33 @@ const CATEGORY_COLORS: { [key: string]: string } = {
   entertainment: "#4BC0C0",
 };
 
-const ExpenseDashboard: React.FC<{ user: { name: string }; onLogout: () => void }> = ({user, onLogout}) => {
-
+const ExpenseDashboard: React.FC<{
+  user: { name: string };
+  onLogout: () => void;
+}> = ({ user, onLogout }) => {
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [expenseData, setExpenseData] = useState<ExpenseEntry[]>([]);
+  const [loading, setLoading] = useState<boolean>(true); // Loading state
+
+  // Fetch expenses from backend
+  const fetchExpenses = async () => {
+    try {
+      const response = await axios.get("/api/expenses");
+      if (response.data.success) {
+        setExpenseData(response.data.data);
+      } else {
+        console.error(response.data.error);
+      }
+    } catch (error) {
+      console.error("Failed to fetch expenses:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
+    fetchExpenses();
+
     const today = new Date();
     const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 0 });
     const endOfCurrentWeek = endOfWeek(today, { weekStartsOn: 0 });
@@ -53,29 +72,66 @@ const ExpenseDashboard: React.FC<{ user: { name: string }; onLogout: () => void 
   }, []);
 
   // Function to add or update an expense entry
-  const addExpense = (category: keyof Omit<ExpenseEntry, "date">, amount: number, date: string) => {
-    setExpenseData((prevData) => {
-      const existingEntry = prevData.find((entry) => entry.date === date);
+  const addExpense = async (
+    category: keyof Omit<ExpenseEntry, "date">,
+    amount: number,
+    date: string
+  ) => {
+    try {
+      const response = await axios.post("/api/expenses", {
+        category,
+        amount,
+        date,
+      });
 
-      if (existingEntry) {
-        return prevData.map((entry) =>
-          entry.date === date
-            ? { ...entry, [category]: entry[category] + amount }
-            : entry
-        );
+      if (response.data.success) {
+        // setExpenseData((prevData) => {
+        //   const existingEntry = prevData.find((entry) => entry.date === date);
+
+        //   if (existingEntry) {
+        //     return prevData.map((entry) =>
+        //       entry.date === date
+        //         ? { ...entry, [category]: entry[category] + amount }
+        //         : entry
+        //     );
+        //   } else {
+        //     const newEntry: ExpenseEntry = {
+        //       date,
+        //       food: 0,
+        //       shopping: 0,
+        //       travelling: 0,
+        //       entertainment: 0,
+        //       [category]: amount,
+        //     };
+        //     const sortedExpenseData = [...prevData, newEntry].sort(
+        //       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        //     );
+        //     return sortedExpenseData;
+        //   }
+        // });
+
+        setExpenseData((prevData) => {
+          const updatedEntry = response.data.data[0];
+          const index = prevData.findIndex(
+            (entry) => entry.date === updatedEntry.date
+          );
+
+          if (index !== -1) {
+            // Update existing entry
+            const updatedData = [...prevData];
+            updatedData[index] = updatedEntry;
+            return updatedData;
+          } else {
+            // Add new entry
+            return [...prevData, updatedEntry];
+          }
+        });
       } else {
-        const newEntry: ExpenseEntry = {
-          date,
-          food: 0,
-          shopping: 0,
-          travelling: 0,
-          entertainment: 0,
-          [category]: amount,
-        };
-        const sortedExpenseData = [...prevData, newEntry].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        return sortedExpenseData;
+        console.error(response.data.error);
       }
-    });
+    } catch (error) {
+      console.error("Failed to add expense:", error);
+    }
   };
 
   // Filter expense data based on selected date range
