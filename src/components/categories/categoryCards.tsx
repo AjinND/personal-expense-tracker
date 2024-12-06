@@ -61,12 +61,12 @@ const CategoryCards: React.FC<CategoryCardsProps> = ({
   };
 
   const handleExpenseSave = () => {
-    console.log(
-      "Amount Spend + Expense Date ",
-      selectedCategory,
-      amountSpend,
-      expenseDate?.toLocaleDateString("en-CA")
-    );
+    // console.log(
+    //   "Amount Spend + Expense Date ",
+    //   selectedCategory,
+    //   amountSpend,
+    //   expenseDate?.toLocaleDateString("en-CA")
+    // );
     // saveData(amountSpend, expenseDate?.toISOString().split("T")[0]);
     if (selectedCategory && expenseDate) {
       addExpense(

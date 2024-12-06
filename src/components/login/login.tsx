@@ -14,18 +14,18 @@ import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 
 // Dummy user data (in a real app, this would come from backend)
-const DUMMY_USERS = [
-  {
-    username: "user@example.com",
-    password: "password123",
-    name: "John Doe",
-  },
-  {
-    username: "admin@example.com",
-    password: "admin123",
-    name: "Jane Smith",
-  },
-];
+// const DUMMY_USERS = [
+//   {
+//     username: "user@example.com",
+//     password: "password123",
+//     name: "John Doe",
+//   },
+//   {
+//     username: "admin@example.com",
+//     password: "admin123",
+//     name: "Jane Smith",
+//   },
+// ];
 
 const AuthenticationPage: React.FC<{
   onAuthenticate: (userdate: { name: string; email: string }) => void;
@@ -41,54 +41,91 @@ const AuthenticationPage: React.FC<{
 
   const handleLogin = (e: { preventDefault: () => void }) => {
     e.preventDefault();
+    handleAuthentication(e);
 
     // Find user in dummy data
-    const user = DUMMY_USERS.find(
-      (u) => u.username === email && u.password === password
-    );
+    // const user = DUMMY_USERS.find(
+    //   (u) => u.username === email && u.password === password
+    // );
 
-    if (user) {
-      setError("");
-      onAuthenticate({
-        name: user.name,
-        email: user.username,
-      });
-    } else {
-      setError("Invalid email or password");
-    }
+    // if (user) {
+    //   setError("");
+    //   onAuthenticate({
+    //     name: user.name,
+    //     email: user.username,
+    //   });
+    // } else {
+    //   setError("Invalid email or password");
+    // }
   };
 
   const handleRegistration = (e: { preventDefault: () => void }) => {
     e.preventDefault();
 
+    handleAuthentication(e);
     // Basic validation
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
+    // if (password !== confirmPassword) {
+    //   setError("Passwords do not match");
+    //   return;
+    // }
 
     // Check if user already exists
-    const existingUser = DUMMY_USERS.find((u) => u.username === email);
-    if (existingUser) {
-      setError("User with this email already exists");
-      return;
-    }
+    // const existingUser = DUMMY_USERS.find((u) => u.username === email);
+    // if (existingUser) {
+    //   setError("User with this email already exists");
+    //   return;
+    // }
 
-    // Create new user
-    const newUser = {
-      id: DUMMY_USERS.length + 1,
-      username: email,
-      password: password,
-      name: name,
+    // // Create new user
+    // const newUser = {
+    //   id: DUMMY_USERS.length + 1,
+    //   username: email,
+    //   password: password,
+    //   name: name,
+    // };
+    // DUMMY_USERS.push(newUser);
+
+    // // Automatically log in the new user
+    // setError("");
+    // onAuthenticate({
+    //   name: newUser.name,
+    //   email: newUser.username,
+    // });
+  };
+
+  const handleAuthentication = async (e: { preventDefault: () => void }) => {
+    e.preventDefault();
+
+    const action = isLogin ? "login" : "register";
+    const body = {
+      action,
+      name,
+      email,
+      password,
+      ...(isLogin ? {} : { confirmPassword }),
     };
-    DUMMY_USERS.push(newUser);
 
-    // Automatically log in the new user
-    setError("");
-    onAuthenticate({
-      name: newUser.name,
-      email: newUser.username,
-    });
+    try {
+      const response = await fetch("/api/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        setError(data.error);
+        return;
+      }
+
+      setError("");
+      onAuthenticate({ name: data.user.name, email: data.user.email });
+    } catch (error: any) {
+      setError("Something went wrong. Please try again.");
+    }
   };
 
   const toggleAuthMode = () => {
