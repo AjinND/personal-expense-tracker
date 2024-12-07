@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import dbConnect from "@/lib/db";
 import User, { IUser } from "@/models/User";
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 export async function POST(req: Request) {
   const { action, name, email, password, confirmPassword } = await req.json();
@@ -40,9 +40,22 @@ export async function POST(req: Request) {
         password: hashedPassword,
       });
 
-      return NextResponse.json({ success: true, user: newUser });
+      // Generate JWT token
+      const token = jwt.sign(
+        { id: newUser._id, email: newUser.email },
+        JWT_SECRET,
+        {
+          expiresIn: "7d",
+        }
+      );
+      localStorage.setItem("token", token);
+
+      return NextResponse.json({ success: true, token, user: newUser });
     } catch (error: any) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 500 }
+      );
     }
   } else if (action === "login") {
     // Handle login
@@ -67,10 +80,14 @@ export async function POST(req: Request) {
       const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, {
         expiresIn: "7d",
       });
+      // console.log(token)
 
       return NextResponse.json({ success: true, token, user });
     } catch (error: any) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 500 }
+      );
     }
   } else {
     return NextResponse.json(

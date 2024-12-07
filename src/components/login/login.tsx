@@ -28,7 +28,7 @@ import { Eye, EyeOff } from "lucide-react";
 // ];
 
 const AuthenticationPage: React.FC<{
-  onAuthenticate: (userdate: { name: string; email: string }) => void;
+  onAuthenticate: (userdata: { name: string; email: string }) => void;
 }> = ({ onAuthenticate }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -41,59 +41,59 @@ const AuthenticationPage: React.FC<{
 
   const handleLogin = (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    handleAuthentication(e);
+    handleUserAuthentication(e);
 
-    // Find user in dummy data
-    // const user = DUMMY_USERS.find(
-    //   (u) => u.username === email && u.password === password
-    // );
+  // Find user in dummy data
+  // const user = DUMMY_USERS.find(
+  //   (u) => u.username === email && u.password === password
+  // );
 
-    // if (user) {
-    //   setError("");
-    //   onAuthenticate({
-    //     name: user.name,
-    //     email: user.username,
-    //   });
-    // } else {
-    //   setError("Invalid email or password");
-    // }
+  // if (user) {
+  //   setError("");
+  //   onAuthenticate({
+  //     name: user.name,
+  //     email: user.username,
+  //   });
+  // } else {
+  //   setError("Invalid email or password");
+  // }
   };
 
   const handleRegistration = (e: { preventDefault: () => void }) => {
     e.preventDefault();
+    handleUserAuthentication(e);
 
-    handleAuthentication(e);
-    // Basic validation
-    // if (password !== confirmPassword) {
-    //   setError("Passwords do not match");
-    //   return;
-    // }
+  // Basic validation
+  // if (password !== confirmPassword) {
+  //   setError("Passwords do not match");
+  //   return;
+  // }
 
-    // Check if user already exists
-    // const existingUser = DUMMY_USERS.find((u) => u.username === email);
-    // if (existingUser) {
-    //   setError("User with this email already exists");
-    //   return;
-    // }
+  // Check if user already exists
+  // const existingUser = DUMMY_USERS.find((u) => u.username === email);
+  // if (existingUser) {
+  //   setError("User with this email already exists");
+  //   return;
+  // }
 
-    // // Create new user
-    // const newUser = {
-    //   id: DUMMY_USERS.length + 1,
-    //   username: email,
-    //   password: password,
-    //   name: name,
-    // };
-    // DUMMY_USERS.push(newUser);
+  // // Create new user
+  // const newUser = {
+  //   id: DUMMY_USERS.length + 1,
+  //   username: email,
+  //   password: password,
+  //   name: name,
+  // };
+  // DUMMY_USERS.push(newUser);
 
-    // // Automatically log in the new user
-    // setError("");
-    // onAuthenticate({
-    //   name: newUser.name,
-    //   email: newUser.username,
-    // });
+  // // Automatically log in the new user
+  // setError("");
+  // onAuthenticate({
+  //   name: newUser.name,
+  //   email: newUser.username,
+  // });
   };
 
-  const handleAuthentication = async (e: { preventDefault: () => void }) => {
+  const handleUserAuthentication = async (e: { preventDefault: () => void }) => {
     e.preventDefault();
 
     const action = isLogin ? "login" : "register";
@@ -120,6 +120,9 @@ const AuthenticationPage: React.FC<{
         setError(data.error);
         return;
       }
+
+      // Save token in localStorage
+      localStorage.setItem("token", data.token);
 
       setError("");
       onAuthenticate({ name: data.user.name, email: data.user.email });

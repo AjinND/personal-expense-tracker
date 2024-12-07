@@ -6,6 +6,7 @@ export interface IExpense extends Document {
     shopping: number;
     travelling: number;
     entertainment: number;
+    user: mongoose.Types.ObjectId; // Reference to the User
 }
 
 const ExpenseSchema: Schema = new Schema({
@@ -19,7 +20,8 @@ const ExpenseSchema: Schema = new Schema({
     shopping: { type: Number, default: 0 },
     travelling: { type: Number, default: 0 },
     entertainment: { type: Number, default: 0 },
-});
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+}, { timestamps: true });
 
 // Prevent model overwrite upon initial compile
 export default (mongoose.models.Expense as Model<IExpense>) ||

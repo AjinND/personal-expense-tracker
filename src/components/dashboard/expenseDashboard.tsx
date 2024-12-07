@@ -49,9 +49,23 @@ const ExpenseDashboard: React.FC<{
   // Fetch expenses from backend
   const fetchExpenses = async () => {
     try {
-      const response = await axios.get("/api/expenses");
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        console.error("No token found");
+        return;
+      }
+
+      const response = await axios.get("/api/expenses", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       if (response.data.success) {
-        setExpenseData(response.data.data);
+        const sortedExpenseData = response.data.data.sort(
+          (a: { date: string | number | Date; }, b: { date: string | number | Date; }) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        setExpenseData(sortedExpenseData);
       } else {
         console.error(response.data.error);
       }
@@ -77,12 +91,26 @@ const ExpenseDashboard: React.FC<{
     amount: number,
     date: string
   ) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      console.error("No token found");
+      return;
+    }
+
     try {
-      const response = await axios.post("/api/expenses", {
-        category,
-        amount,
-        date,
-      });
+      const response = await axios.post(
+        "/api/expenses",
+        {
+          category,
+          amount,
+          date,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`, // Authorization header
+          },
+        }
+      );
 
       if (response.data.success) {
         // setExpenseData((prevData) => {
@@ -154,7 +182,7 @@ const ExpenseDashboard: React.FC<{
 
     return expenseData?.filter((expense) => {
       const expenseDate = new Date(expense.date);
-      console.log(expenseDate >= startDate && expenseDate <= endDate);
+      // console.log(expenseDate >= startDate && expenseDate <= endDate);
       return expenseDate >= startDate && expenseDate <= endDate;
     });
   }, [dateRange, expenseData]);
