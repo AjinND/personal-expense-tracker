@@ -32,7 +32,6 @@ export async function POST(req: Request) {
 
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
-
       // Create new user
       const newUser: IUser = await User.create({
         name,
@@ -42,13 +41,13 @@ export async function POST(req: Request) {
 
       // Generate JWT token
       const token = jwt.sign(
-        { id: newUser._id, email: newUser.email },
+        { id: newUser._id, name: newUser.name },
         JWT_SECRET,
         {
           expiresIn: "7d",
         }
       );
-      localStorage.setItem("token", token);
+      // localStorage.setItem("token", token);
 
       return NextResponse.json({ success: true, token, user: newUser });
     } catch (error: any) {
@@ -77,7 +76,7 @@ export async function POST(req: Request) {
       }
 
       // Generate JWT
-      const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, {
+      const token = jwt.sign({ id: user._id, name: user.name }, JWT_SECRET, {
         expiresIn: "7d",
       });
       // console.log(token)

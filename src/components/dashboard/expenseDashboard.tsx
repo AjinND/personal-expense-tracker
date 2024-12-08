@@ -12,7 +12,6 @@ import {
   Legend,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import mockData from "@/data/mockData";
 import Navigation from "@/components/navigation/navBar";
 import ExpenseSummary from "@/components/expenseSummary/summary";
 import { DateRange } from "react-day-picker";
@@ -45,6 +44,7 @@ const ExpenseDashboard: React.FC<{
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [expenseData, setExpenseData] = useState<ExpenseEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true); // Loading state
+  const [totalBalance, setTotalBalance] = useState(0.0);
 
   // Fetch expenses from backend
   const fetchExpenses = async () => {
@@ -107,37 +107,12 @@ const ExpenseDashboard: React.FC<{
         },
         {
           headers: {
-            Authorization: `Bearer ${token}`, // Authorization header
+            Authorization: `Bearer ${token}`,
           },
         }
       );
 
       if (response.data.success) {
-        // setExpenseData((prevData) => {
-        //   const existingEntry = prevData.find((entry) => entry.date === date);
-
-        //   if (existingEntry) {
-        //     return prevData.map((entry) =>
-        //       entry.date === date
-        //         ? { ...entry, [category]: entry[category] + amount }
-        //         : entry
-        //     );
-        //   } else {
-        //     const newEntry: ExpenseEntry = {
-        //       date,
-        //       food: 0,
-        //       shopping: 0,
-        //       travelling: 0,
-        //       entertainment: 0,
-        //       [category]: amount,
-        //     };
-        //     const sortedExpenseData = [...prevData, newEntry].sort(
-        //       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-        //     );
-        //     return sortedExpenseData;
-        //   }
-        // });
-
         setExpenseData((prevData) => {
           const updatedEntry = response.data.data[0];
           const index = prevData.findIndex(
@@ -232,7 +207,35 @@ const ExpenseDashboard: React.FC<{
   }, [totalExpenses, filteredExpenseData]);
 
   // Calculate budget remaining
-  const [totalBalance, setTotalBalance] = useState(0.0);
+  useEffect(() => {
+    const getMonthlyBudget = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          console.error("No token found");
+          return;
+        }
+  
+        const response = await axios.get("/api/budget/monthly", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (response.data.success) {
+          const monthlyBudget = response.data.monthlyBudget;
+          // console.log("monthly --> ", typeof monthlyBudget)
+          setTotalBalance(monthlyBudget);
+        } else {
+          console.error(response.data.error);
+        }
+      } catch (error) {
+        console.error("Failed to fetch Monthly Remaining Budget:", error);
+      }
+    }
+    getMonthlyBudget();
+  }, []);
+  
+
   const remainingBudget = useMemo(
     () => totalBalance - totalExpenses,
     [totalBalance, totalExpenses]

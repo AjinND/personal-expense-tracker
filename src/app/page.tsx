@@ -2,8 +2,8 @@
 
 import ExpenseDashboard from "@/components/dashboard/expenseDashboard";
 import AuthenticationPage from "@/components/login/login";
-import { verifyToken } from "@/lib/auth";
 import axios from "axios";
+import { Loader2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 type User = {
@@ -12,37 +12,46 @@ type User = {
 };
 const AppWrapper = () => {
   const [user, setUser] = useState<User | null>(null);
+  // const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(async () => {
-    const token = localStorage.getItem("token");
-    console.log("UserData ---> ", token);
-    if(token) {
-      const response = await axios.get("/api/auth/session", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-    //  axios
-    //     .post("/api/auth/session", {
-    //       headers: {
-    //         Authorization: `Bearer ${token}`,
-    //       },
-    //     }) 
-    //     .then((response) => {
-    //       if (response.data.success) {
-    //         setUser(response.data.user);  // Set user if token is valid
-    //       }
-    //     })
-    //     .catch((error) => {
-    //       console.error("Error verifying token:", error);
-    //       localStorage.removeItem("token");  // Remove invalid token from localStorage
-    //       setUser(null);
-    //     });
+  useEffect(() => {
+    async function validateToken(token: string) {
+      // setIsLoading(true);
+      await axios
+        .post(
+          "/api/auth/session",
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        )
+        .then((response) => {
+          if (response.data.success) {
+            // console.log(response.data.userData);
+            setUser(response.data.userData);
+            // setIsLoading(false);
+          }
+        })
+        .catch((error) => {
+          // console.error("Error verifying token:", error);
+          localStorage.removeItem("token");
+          setUser(null);
+          // setIsLoading(false);
+          throw new Error("Error verifying token:", error);
+        });
     }
-  },[])
+    const token = localStorage.getItem("token");
+    if (token) validateToken(token);
+  }, []);
 
   const handleAuthenticate = (userData: React.SetStateAction<User | null>) => {
-    setUser(userData);
+    // setIsLoading(true);
+    if (userData) {
+      setUser(userData);
+      // setIsLoading(false);
+    }
   };
 
   const handleLogout = () => {
@@ -50,13 +59,23 @@ const AppWrapper = () => {
     setUser(null);
   };
 
-  // If no user is authenticated, show login page
-  console.log("UserData ---> ", user)
+  // const LoadingOverlay = () => (
+  //   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+  //     <div className="flex flex-col items-center justify-center">
+  //       <Loader2 className="h-12 w-12 animate-spin text-white" />
+  //       <p className="mt-4 text-white text-lg">Loading...</p>
+  //     </div>
+  //   </div>
+  // );
+
+  // if (isLoading) {
+  //   return <LoadingOverlay />;
+  // }
+
   if (!user) {
     return <AuthenticationPage onAuthenticate={handleAuthenticate} />;
   }
 
-  // If user is authenticated, show dashboard (or main app)
   return <ExpenseDashboard user={user} onLogout={handleLogout} />;
 };
 

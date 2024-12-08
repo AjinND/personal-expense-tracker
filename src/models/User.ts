@@ -5,6 +5,7 @@ export interface IUser extends Document {
     email: string;
     password: string;
     expenses: mongoose.Types.ObjectId[]; // Array of references to Expense
+    monthlyBudget: Number;
 }
 
 const UserSchema = new Schema<IUser>(
@@ -13,6 +14,7 @@ const UserSchema = new Schema<IUser>(
         email: { type: String, required: true, unique: true },
         password: { type: String, required: true },
         expenses: [{ type: mongoose.Schema.Types.ObjectId, ref: "Expense" }], // Reference
+        monthlyBudget: { type: Number, default: 0 },
     },
     { timestamps: true }
 );

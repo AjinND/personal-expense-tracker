@@ -13,20 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 
-// Dummy user data (in a real app, this would come from backend)
-// const DUMMY_USERS = [
-//   {
-//     username: "user@example.com",
-//     password: "password123",
-//     name: "John Doe",
-//   },
-//   {
-//     username: "admin@example.com",
-//     password: "admin123",
-//     name: "Jane Smith",
-//   },
-// ];
-
 const AuthenticationPage: React.FC<{
   onAuthenticate: (userdata: { name: string; email: string }) => void;
 }> = ({ onAuthenticate }) => {
@@ -38,62 +24,23 @@ const AuthenticationPage: React.FC<{
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = (e: { preventDefault: () => void }) => {
     e.preventDefault();
+    setIsSubmitting(true);
     handleUserAuthentication(e);
-
-  // Find user in dummy data
-  // const user = DUMMY_USERS.find(
-  //   (u) => u.username === email && u.password === password
-  // );
-
-  // if (user) {
-  //   setError("");
-  //   onAuthenticate({
-  //     name: user.name,
-  //     email: user.username,
-  //   });
-  // } else {
-  //   setError("Invalid email or password");
-  // }
   };
 
   const handleRegistration = (e: { preventDefault: () => void }) => {
     e.preventDefault();
+    setIsSubmitting(true);
     handleUserAuthentication(e);
-
-  // Basic validation
-  // if (password !== confirmPassword) {
-  //   setError("Passwords do not match");
-  //   return;
-  // }
-
-  // Check if user already exists
-  // const existingUser = DUMMY_USERS.find((u) => u.username === email);
-  // if (existingUser) {
-  //   setError("User with this email already exists");
-  //   return;
-  // }
-
-  // // Create new user
-  // const newUser = {
-  //   id: DUMMY_USERS.length + 1,
-  //   username: email,
-  //   password: password,
-  //   name: name,
-  // };
-  // DUMMY_USERS.push(newUser);
-
-  // // Automatically log in the new user
-  // setError("");
-  // onAuthenticate({
-  //   name: newUser.name,
-  //   email: newUser.username,
-  // });
   };
 
-  const handleUserAuthentication = async (e: { preventDefault: () => void }) => {
+  const handleUserAuthentication = async (e: {
+    preventDefault: () => void;
+  }) => {
     e.preventDefault();
 
     const action = isLogin ? "login" : "register";
@@ -117,6 +64,7 @@ const AuthenticationPage: React.FC<{
       const data = await response.json();
 
       if (!data.success) {
+        setIsSubmitting(false);
         setError(data.error);
         return;
       }
@@ -127,6 +75,7 @@ const AuthenticationPage: React.FC<{
       setError("");
       onAuthenticate({ name: data.user.name, email: data.user.email });
     } catch (error: any) {
+      setIsSubmitting(false);
       setError("Something went wrong. Please try again.");
     }
   };
@@ -168,6 +117,7 @@ const AuthenticationPage: React.FC<{
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
+                  disabled={isSubmitting}
                 />
               </div>
             )}
@@ -181,6 +131,7 @@ const AuthenticationPage: React.FC<{
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={isSubmitting}
               />
             </div>
 
@@ -194,6 +145,7 @@ const AuthenticationPage: React.FC<{
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={8}
+                  disabled={isSubmitting}
                 />
                 <button
                   type="button"
@@ -220,6 +172,7 @@ const AuthenticationPage: React.FC<{
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
                     minLength={8}
+                    disabled={isSubmitting}
                   />
                   <button
                     type="button"
@@ -238,22 +191,32 @@ const AuthenticationPage: React.FC<{
 
             {error && <div className="text-red-500 text-sm">{error}</div>}
 
-            <Button type="submit" className="w-full">
-              {isLogin ? "Sign In" : "Create Account"}
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting
+                ? isLogin
+                  ? "Signing In..."
+                  : "Creating Account..."
+                : isLogin
+                ? "Sign In"
+                : "Create Account"}
             </Button>
           </form>
 
-          <div className="mt-4 text-center text-sm">
-            {isLogin ? "Don't have an account? " : "Already have an account? "}
-            <button
-              onClick={toggleAuthMode}
-              className="underline ml-1 bg-transparent border-none cursor-pointer"
-            >
-              {isLogin ? "Register" : "Login"}
-            </button>
-          </div>
+          {!isSubmitting && (
+            <div className="mt-4 text-center text-sm">
+              {isLogin
+                ? "Don't have an account? "
+                : "Already have an account? "}
+              <button
+                onClick={toggleAuthMode}
+                className="underline ml-1 bg-transparent border-none cursor-pointer"
+              >
+                {isLogin ? "Register" : "Login"}
+              </button>
+            </div>
+          )}
 
-          {isLogin && (
+          {isLogin && !isSubmitting && (
             <div className="mt-2 text-center text-sm">
               Forgot password?
               <a href="#" className="underline ml-1">
