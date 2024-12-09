@@ -9,7 +9,7 @@ const Navigation: React.FC<{ user: { name: string }; onLogout: () => void }> = (
       </div>
       <div className="flex items-center space-x-4">
         <a
-          href="#"
+          href="/"
           className="flex items-center text-gray-600 hover:text-blue-600"
         >
           <BarChart className="mr-2" size={20} /> Dashboard

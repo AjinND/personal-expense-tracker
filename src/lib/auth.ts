@@ -12,7 +12,7 @@ export function verifyToken(authHeader: string | null) {
         const decoded = jwt.verify(token, JWT_SECRET);
         return decoded; // Returns { id, email }
     } catch (error) {
-        console.log(error)
+        // console.log(error)
         throw new Error("Invalid token");
     }
 }

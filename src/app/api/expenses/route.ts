@@ -3,7 +3,6 @@ import dbConnect from "@/lib/db";
 import Expense from "@/models/Expense";
 import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
-import { use } from "react";
 import mongoose from "mongoose";
 import { JwtPayload } from "jsonwebtoken";
 
