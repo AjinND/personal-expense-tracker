@@ -1,4 +1,5 @@
-import { BarChart, LogOut, Settings, User, Wallet } from "lucide-react";
+import { BarChart, LogOut, User, Wallet } from "lucide-react";
+import Link from "next/link";
 
 const Navigation: React.FC<{ user: { name: string }; onLogout: () => void }> = ({user, onLogout}) => (
   <nav className="bg-white shadow-md">
@@ -8,25 +9,25 @@ const Navigation: React.FC<{ user: { name: string }; onLogout: () => void }> = (
         <h1 className="text-xl font-bold text-gray-800">Expense Tracker</h1>
       </div>
       <div className="flex items-center space-x-4">
-        <a
+        <Link
           href="/"
           className="flex items-center text-gray-600 hover:text-blue-600"
         >
           <BarChart className="mr-2" size={20} /> Dashboard
-        </a>
-        <a
+        </Link>
+        <Link
           href="#"
           className="flex items-center text-gray-600 hover:text-blue-600"
         >
           <User className="mr-2" size={20} /> {user.name}
-        </a>
-        <a
-          // href="#"
+        </Link>
+        <Link
+          href="#"
           className="flex items-center text-gray-600 hover:text-blue-600"
           onClick={() => onLogout()}
         >
           <LogOut className="mr-2" size={20} /> Logout
-        </a>
+        </Link>
       </div>
     </div>
   </nav>

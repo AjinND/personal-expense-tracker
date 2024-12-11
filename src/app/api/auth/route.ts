@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       // localStorage.setItem("token", token);
 
       return NextResponse.json({ success: true, token, user: newUser });
-    } catch (error: any) {
+    } catch (error) {
       return NextResponse.json(
         { success: false, error: error.message },
         { status: 500 }

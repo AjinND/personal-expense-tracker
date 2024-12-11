@@ -3,7 +3,6 @@
 import ExpenseDashboard from "@/components/dashboard/expenseDashboard";
 import AuthenticationPage from "@/components/login/login";
 import axios from "axios";
-import { Loader2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 type User = {
