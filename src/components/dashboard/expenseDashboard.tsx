@@ -43,7 +43,7 @@ const ExpenseDashboard: React.FC<{
 }> = ({ user, onLogout }) => {
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [expenseData, setExpenseData] = useState<ExpenseEntry[]>([]);
-  const [loading, setLoading] = useState<boolean>(true); // Loading state
+  // const [loading, setLoading] = useState<boolean>(true); 
   const [totalBalance, setTotalBalance] = useState(0.0);
 
   // Fetch expenses from backend
@@ -71,9 +71,10 @@ const ExpenseDashboard: React.FC<{
       }
     } catch (error) {
       console.error("Failed to fetch expenses:", error);
-    } finally {
-      setLoading(false);
     }
+    // } finally {
+    //   setLoading(false);
+    // }
   };
 
   useEffect(() => {
@@ -272,6 +273,7 @@ const ExpenseDashboard: React.FC<{
             <div className="flex items-center space-x-2">
               <DatePickerWithRange
                 value={dateRange}
+                // @ts-expect-error
                 onChange={setDateRange}
                 formatDate={(date: { toLocaleDateString: () => string }) =>
                   date.toLocaleDateString()

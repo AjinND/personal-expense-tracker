@@ -75,6 +75,7 @@ const AuthenticationPage: React.FC<{
       setError("");
       onAuthenticate({ name: data.user.name, email: data.user.email });
     } catch (error: any) {
+      console.log(error);
       setIsSubmitting(false);
       setError("Something went wrong. Please try again.");
     }
