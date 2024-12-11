@@ -273,6 +273,7 @@ const ExpenseDashboard: React.FC<{
             <div className="flex items-center space-x-2">
               <DatePickerWithRange
                 value={dateRange}
+                // @ts-expect-error
                 onChange={setDateRange}
                 formatDate={(date: { toLocaleDateString: () => string }) =>
                   date.toLocaleDateString()
