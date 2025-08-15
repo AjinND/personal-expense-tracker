@@ -1,307 +1,186 @@
+// src/components/dashboard/ExpenseDashboard.tsx
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import Navigation from "@/components/navigation/navBar";
-import ExpenseSummary from "@/components/expenseSummary/summary";
-import { DateRange } from "react-day-picker";
-import { DatePickerWithRange } from "@/components/ui/date-range-picker";
-import { endOfWeek, startOfWeek } from "date-fns";
-import CategoryCards from "@/components/categories/categoryCards";
-import axios from "axios";
+import React from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
+import Navigation from '@/components/navigation/navBar';
+import { DashboardHeader } from './DashboardHeader';
+import { ExpenseSummary } from './ExpenseSummary';
+import { CategoryCards } from './CategoryCards';
+import { DashboardCharts } from './DashboardCharts';
+import { useDashboard, useChartData } from '@/hooks/useDashboard';
+import { User } from '@/types/dashboard';
+import { cn } from '@/lib/utils';
 
-// Types defined
-type ExpenseEntry = {
-  date: string;
-  food: number;
-  shopping: number;
-  travelling: number;
-  entertainment: number;
-};
-
-// Category colors
-const CATEGORY_COLORS: { [key: string]: string } = {
-  food: "#FF6384",
-  shopping: "#36A2EB",
-  travelling: "#FFCE56",
-  entertainment: "#4BC0C0",
-};
-
-const ExpenseDashboard: React.FC<{
-  user: { name: string };
+interface ExpenseDashboardProps {
+  user: User;
   onLogout: () => void;
-}> = ({ user, onLogout }) => {
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
-  const [expenseData, setExpenseData] = useState<ExpenseEntry[]>([]);
-  // const [loading, setLoading] = useState<boolean>(true); 
-  const [totalBalance, setTotalBalance] = useState(0.0);
+  className?: string;
+}
 
-  // Fetch expenses from backend
-  const fetchExpenses = async () => {
-    try {
-      const token = localStorage.getItem("token");
+// Loading skeleton component
+const DashboardSkeleton: React.FC = () => (
+  <div className="container mx-auto p-4 sm:p-6 space-y-6">
+    {/* Header skeleton */}
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <Skeleton className="h-10 w-24" />
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-20 w-full" />
+        ))}
+      </div>
+    </div>
 
-      if (!token) {
-        console.error("No token found");
-        return;
-      }
+    {/* Summary skeleton */}
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Skeleton key={i} className="h-32 w-full" />
+      ))}
+    </div>
 
-      const response = await axios.get("/api/expenses", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (response.data.success) {
-        const sortedExpenseData = response.data.data.sort(
-          (a: { date: string | number | Date; }, b: { date: string | number | Date; }) => new Date(a.date).getTime() - new Date(b.date).getTime()
-        );
-        setExpenseData(sortedExpenseData);
-      } else {
-        console.error(response.data.error);
-      }
-    } catch (error) {
-      console.error("Failed to fetch expenses:", error);
-    }
-    // } finally {
-    //   setLoading(false);
-    // }
-  };
+    {/* Category cards skeleton */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton key={i} className="h-48 w-full" />
+      ))}
+    </div>
 
-  useEffect(() => {
-    fetchExpenses();
+    {/* Charts skeleton */}
+    <Skeleton className="h-96 w-full" />
+  </div>
+);
 
-    const today = new Date();
-    const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 0 });
-    const endOfCurrentWeek = endOfWeek(today, { weekStartsOn: 0 });
-    setDateRange({ from: startOfCurrentWeek, to: endOfCurrentWeek });
-  }, []);
+// Error component
+const DashboardError: React.FC<{
+  error: string;
+  onRetry: () => void;
+}> = ({ error, onRetry }) => (
+  <div className="container mx-auto p-6">
+    <Alert variant="destructive" className="max-w-2xl mx-auto">
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription className="flex items-center justify-between">
+        <span>{error}</span>
+        <button
+          onClick={onRetry}
+          className="ml-4 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded text-sm font-medium transition-colors"
+        >
+          Retry
+        </button>
+      </AlertDescription>
+    </Alert>
+  </div>
+);
 
-  // Function to add or update an expense entry
-  const addExpense = async (
-    category: keyof Omit<ExpenseEntry, "date">,
-    amount: number,
-    date: string
-  ) => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      console.error("No token found");
-      return;
-    }
+export const ExpenseDashboard: React.FC<ExpenseDashboardProps> = ({
+  user,
+  onLogout,
+  className,
+}) => {
+  // Use custom dashboard hook
+  const {
+    expenseData,
+    loading,
+    error,
+    refreshing,
+    dateRange,
+    totalBalance,
+    metrics,
+    addExpense,
+    updateBudget,
+    refreshData,
+    setDateRange,
+    retryOperation,
+  } = useDashboard({ onLogout });
 
-    try {
-      const response = await axios.post(
-        "/api/expenses",
-        {
-          category,
-          amount,
-          date,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+  // Use chart data hook
+  const chartData = useChartData(expenseData, dateRange);
 
-      if (response.data.success) {
-        setExpenseData((prevData) => {
-          const updatedEntry = response.data.data[0];
-          const index = prevData.findIndex(
-            (entry) => entry.date === updatedEntry.date
-          );
+  // Handle critical errors
+  if (error && !loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation user={user} onLogout={onLogout} />
+        <DashboardError error={error} onRetry={retryOperation} />
+      </div>
+    );
+  }
 
-          if (index !== -1) {
-            // Update existing entry
-            const updatedData = [...prevData];
-            updatedData[index] = updatedEntry;
-            const sortedExpenseData = updatedData.sort(
-              (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-            );
-            // console.log("Sorted1 ", sortedExpenseData);
-            return sortedExpenseData;
-            // return updatedData;
-          } else {
-            // Add new entry
-            const sortedExpenseData = [...prevData, updatedEntry].sort(
-              (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-            );
-            // console.log("Sorted2 ", sortedExpenseData);
-            return sortedExpenseData;
-            // return [...prevData, updatedEntry];
-          }
-        });
-      } else {
-        console.error(response.data.error);
-      }
-    } catch (error) {
-      console.error("Failed to add expense:", error);
-    }
-  };
-
-  // Filter expense data based on selected date range
-  const filteredExpenseData = useMemo(() => {
-    // console.log("da", expenseData);
-    if (!dateRange || !dateRange.from || !dateRange.to) return [];
-
-    const startDate = new Date(dateRange.from);
-    const endDate = new Date(dateRange.to);
-
-    return expenseData?.filter((expense) => {
-      const expenseDate = new Date(expense.date);
-      // console.log(expenseDate >= startDate && expenseDate <= endDate);
-      return expenseDate >= startDate && expenseDate <= endDate;
-    });
-  }, [dateRange, expenseData]);
-
-  // Calculate total expenses for each category
-  const categoryTotals = useMemo(() => {
-    const totals: Record<keyof Omit<ExpenseEntry, "date">, number> = {
-      food: 0,
-      shopping: 0,
-      travelling: 0,
-      entertainment: 0,
-    };
-
-    filteredExpenseData.forEach((entry: ExpenseEntry) => {
-      (Object.keys(totals) as Array<keyof typeof totals>).forEach(
-        (category) => {
-          totals[category] += entry[category];
-        }
-      );
-    });
-
-    return totals;
-  }, [filteredExpenseData]);
-
-  // Calculate total expenses
-  const totalExpenses = useMemo(
-    () => Object.values(categoryTotals).reduce((sum, value) => sum + value, 0),
-    [categoryTotals]
-  );
-
-  const numberOfDaysBetweenDates = useMemo(() => {
-    if (!dateRange || !dateRange.from || !dateRange.to) return 0;
-
-    const startDate = new Date(dateRange?.from);
-    const endDate = new Date(dateRange?.to);
-    const timeDiff = endDate.getTime() - startDate.getTime();
-    const days = timeDiff / (1000 * 60 * 60 * 24);
-
-    return Math.ceil(days);
-  }, [dateRange]);
-
-  // Calculate average spending
-  const averageSpending = useMemo(() => {
-    const average = totalExpenses / (numberOfDaysBetweenDates || 1);
-    // console.log(" hgsjc ", numberOfDaysBetweenDates);
-    return average;
-  }, [totalExpenses, filteredExpenseData]);
-
-  // Calculate budget remaining
-  useEffect(() => {
-    const getMonthlyBudget = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          console.error("No token found");
-          return;
-        }
-  
-        const response = await axios.get("/api/budget/monthly", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (response.data.success) {
-          const monthlyBudget = response.data.monthlyBudget;
-          // console.log("monthly --> ", typeof monthlyBudget)
-          setTotalBalance(monthlyBudget);
-        } else {
-          console.error(response.data.error);
-        }
-      } catch (error) {
-        console.error("Failed to fetch Monthly Remaining Budget:", error);
-      }
-    }
-    getMonthlyBudget();
-  }, []);
-  
-
-  const remainingBudget = useMemo(
-    () => totalBalance - totalExpenses,
-    [totalBalance, totalExpenses]
-  );
-
-  const getRemainingBudget = (newBudget: number) => {
-    setTotalBalance(newBudget);
-  };
+  // Handle loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation user={user} onLogout={onLogout} />
+        <DashboardSkeleton />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={cn("min-h-screen bg-gray-50", className)}>
       <Navigation user={user} onLogout={onLogout} />
 
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+        {/* Dashboard Header */}
+        <DashboardHeader
+          user={user}
+          onRefresh={refreshData}
+          refreshing={refreshing}
+          error={error}
+          onRetry={retryOperation}
+        />
+
+        {/* Expense Summary Cards */}
         <ExpenseSummary
-          totalExpenses={totalExpenses}
-          averageSpending={averageSpending}
-          budgetRemaining={getRemainingBudget}
-          remainingBudget={remainingBudget}
-          timeFrame={"day"}
+          metrics={metrics}
+          totalBalance={totalBalance}
+          onBudgetUpdate={updateBudget}
+          loading={refreshing}
         />
 
-        {/* Category Summary Cards */}
+        {/* Category Cards */}
         <CategoryCards
-          categoryTotals={categoryTotals}
-          categoryColors={CATEGORY_COLORS}
-          addExpense={addExpense}
+          categoryTotals={metrics.categoryTotals}
+          onAddExpense={addExpense}
+          loading={refreshing}
         />
 
-        {/* Expense Categories Chart */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Expense Trends</CardTitle>
-            <div className="flex items-center space-x-2">
-              <DatePickerWithRange
-                value={dateRange}
-                // @ts-expect-error
-                onChange={setDateRange}
-                formatDate={(date: { toLocaleDateString: () => string }) =>
-                  date.toLocaleDateString()
-                }
-              />
+        {/* Charts Section */}
+        <DashboardCharts
+          expenses={expenseData}
+          categoryTotals={metrics.categoryTotals}
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+          loading={refreshing}
+        />
+
+        {/* Footer */}
+        <footer className="text-center py-8 text-gray-500 text-sm border-t border-gray-200">
+          <div className="space-y-2">
+            <p>© 2024 Expense Tracker. Built with security and privacy in mind.</p>
+            <div className="flex items-center justify-center gap-4 text-xs">
+              <span className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                Secure Connection
+              </span>
+              <span className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                Data Encrypted
+              </span>
+              <span className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-purple-500 rounded-full" />
+                Privacy Protected
+              </span>
             </div>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={filteredExpenseData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                {Object.keys(CATEGORY_COLORS).map((category) => (
-                  <Line
-                    key={category}
-                    type="monotone"
-                    dataKey={category}
-                    stroke={CATEGORY_COLORS[category]}
-                    activeDot={{ r: 8 }}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          </div>
+        </footer>
       </div>
     </div>
   );

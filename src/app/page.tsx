@@ -1,6 +1,6 @@
 "use client";
 
-import ExpenseDashboard from "@/components/dashboard/expenseDashboard";
+import ExpenseDashboard from "@/components/dashboard/ExpenseDashboard";
 import AuthenticationPage from "@/components/login/login";
 import axios from "axios";
 import React, { useEffect, useState } from "react";
