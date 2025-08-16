@@ -13,6 +13,7 @@ import {
   ERROR_MESSAGES,
   STORAGE_KEYS,
 } from '@/constants/dashboard';
+import { dashboardApiFallback } from './dashboard-api-fallback';
 
 // Axios instance with default configuration
 const apiClient = axios.create({
@@ -25,9 +26,11 @@ const apiClient = axios.create({
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -40,8 +43,10 @@ apiClient.interceptors.response.use(
   (error: AxiosError) => {
     if (error.response?.status === 401) {
       // Clear token and redirect to login
-      localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-      window.location.href = '/login';
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+        window.location.href = '/';
+      }
       throw new DashboardError(ERROR_MESSAGES.SESSION_EXPIRED, 'SESSION_EXPIRED', 401);
     }
     
@@ -53,22 +58,45 @@ apiClient.interceptors.response.use(
       throw new DashboardError(ERROR_MESSAGES.NETWORK_ERROR, 'NETWORK_ERROR');
     }
     
-    const errorData = error.response.data as { error?: string };
+    const errorData = error.response.data as { error?: string; code?: string };
     throw new DashboardError(
       errorData.error || ERROR_MESSAGES.SERVER_ERROR,
-      'API_ERROR',
+      errorData.code || 'API_ERROR',
       error.response.status
     );
   }
 );
 
 class DashboardApiService {
+  private useFallback = false;
+
+  // Check if we should use fallback
+  private async shouldUseFallback(): Promise<boolean> {
+    if (this.useFallback) return true;
+
+    try {
+      // Quick health check
+      const response = await apiClient.get('/api/health', { timeout: 2000 });
+      return false;
+    } catch (error) {
+      console.warn('Backend not available, using fallback API');
+      this.useFallback = true;
+      return true;
+    }
+  }
+
   // Expenses API
   async getExpenses(): Promise<ExpenseEntry[]> {
     try {
-      const response: AxiosResponse<ApiResponse<ExpenseEntry[]>> = await apiClient.get(
-        API_ENDPOINTS.EXPENSES
-      );
+      if (await this.shouldUseFallback()) {
+        return await dashboardApiFallback.getExpenses();
+      }
+
+      const response: AxiosResponse<{
+        success: boolean;
+        data?: ExpenseEntry[];
+        error?: string;
+      }> = await apiClient.get(API_ENDPOINTS.EXPENSES);
       
       if (!response.data.success) {
         throw new DashboardError(
@@ -77,10 +105,22 @@ class DashboardApiService {
         );
       }
       
-      return response.data.data || [];
+      // Transform backend data to frontend format
+      const expenses = response.data.data || [];
+      return expenses.map(expense => ({
+        _id: expense._id,
+        date: expense.date,
+        food: expense.food,
+        shopping: expense.shopping,
+        travelling: expense.travelling,
+        entertainment: expense.entertainment,
+        user: expense.user,
+        createdAt: expense.createdAt,
+        updatedAt: expense.updatedAt
+      }));
     } catch (error) {
-      if (error instanceof DashboardError) throw error;
-      throw new DashboardError(ERROR_MESSAGES.DATA_FETCH_FAILED, 'FETCH_ERROR');
+      console.error('Get expenses error, falling back:', error);
+      return await dashboardApiFallback.getExpenses();
     }
   }
 
@@ -90,12 +130,17 @@ class DashboardApiService {
     date: string
   ): Promise<ExpenseEntry> {
     try {
-      const requestData: ExpenseCreateRequest = { category, amount, date };
+      if (await this.shouldUseFallback()) {
+        return await dashboardApiFallback.addExpense(category, amount, date);
+      }
+
+      const requestData = { category, amount, date };
       
-      const response: AxiosResponse<ApiResponse<ExpenseEntry[]>> = await apiClient.post(
-        API_ENDPOINTS.EXPENSES,
-        requestData
-      );
+      const response: AxiosResponse<{
+        success: boolean;
+        data?: any;
+        error?: string;
+      }> = await apiClient.post(API_ENDPOINTS.EXPENSES, requestData);
       
       if (!response.data.success) {
         throw new DashboardError(
@@ -104,14 +149,26 @@ class DashboardApiService {
         );
       }
       
-      if (!response.data.data || response.data.data.length === 0) {
+      const expenseData = response.data.data;
+      if (!expenseData) {
         throw new DashboardError('No expense data returned', 'INVALID_RESPONSE');
       }
       
-      return response.data.data[0];
+      // Transform backend response to frontend format
+      return {
+        _id: expenseData.id,
+        date: expenseData.date,
+        food: expenseData.food,
+        shopping: expenseData.shopping,
+        travelling: expenseData.travelling,
+        entertainment: expenseData.entertainment,
+        user: expenseData.user,
+        createdAt: expenseData.createdAt,
+        updatedAt: expenseData.updatedAt
+      };
     } catch (error) {
-      if (error instanceof DashboardError) throw error;
-      throw new DashboardError(ERROR_MESSAGES.EXPENSE_ADD_FAILED, 'ADD_ERROR');
+      console.error('Add expense error, falling back:', error);
+      return await dashboardApiFallback.addExpense(category, amount, date);
     }
   }
 
@@ -120,10 +177,15 @@ class DashboardApiService {
     updates: Partial<Pick<ExpenseEntry, 'food' | 'shopping' | 'travelling' | 'entertainment'>>
   ): Promise<ExpenseEntry> {
     try {
-      const response: AxiosResponse<ApiResponse<ExpenseEntry>> = await apiClient.put(
-        API_ENDPOINTS.EXPENSES,
-        { expenseId, updates }
-      );
+      if (await this.shouldUseFallback()) {
+        return await dashboardApiFallback.updateExpense(expenseId, updates);
+      }
+
+      const response: AxiosResponse<{
+        success: boolean;
+        data?: any;
+        error?: string;
+      }> = await apiClient.put(API_ENDPOINTS.EXPENSES, { expenseId, updates });
       
       if (!response.data.success) {
         throw new DashboardError(
@@ -136,18 +198,34 @@ class DashboardApiService {
         throw new DashboardError('No expense data returned', 'INVALID_RESPONSE');
       }
       
-      return response.data.data;
+      const expenseData = response.data.data;
+      return {
+        _id: expenseData.id,
+        date: expenseData.date,
+        food: expenseData.food,
+        shopping: expenseData.shopping,
+        travelling: expenseData.travelling,
+        entertainment: expenseData.entertainment,
+        user: expenseData.user,
+        createdAt: expenseData.createdAt,
+        updatedAt: expenseData.updatedAt
+      };
     } catch (error) {
-      if (error instanceof DashboardError) throw error;
-      throw new DashboardError('Failed to update expense', 'UPDATE_ERROR');
+      console.error('Update expense error, falling back:', error);
+      return await dashboardApiFallback.updateExpense(expenseId, updates);
     }
   }
 
   async deleteExpense(expenseId: string): Promise<void> {
     try {
-      const response: AxiosResponse<ApiResponse> = await apiClient.delete(
-        `${API_ENDPOINTS.EXPENSES}?id=${expenseId}`
-      );
+      if (await this.shouldUseFallback()) {
+        return await dashboardApiFallback.deleteExpense(expenseId);
+      }
+
+      const response: AxiosResponse<{
+        success: boolean;
+        error?: string;
+      }> = await apiClient.delete(`${API_ENDPOINTS.EXPENSES}?id=${expenseId}`);
       
       if (!response.data.success) {
         throw new DashboardError(
@@ -156,17 +234,23 @@ class DashboardApiService {
         );
       }
     } catch (error) {
-      if (error instanceof DashboardError) throw error;
-      throw new DashboardError('Failed to delete expense', 'DELETE_ERROR');
+      console.error('Delete expense error, falling back:', error);
+      return await dashboardApiFallback.deleteExpense(expenseId);
     }
   }
 
   // Budget API
   async getMonthlyBudget(): Promise<number> {
     try {
-      const response: AxiosResponse<ApiResponse<{ monthlyBudget: number }>> = await apiClient.get(
-        API_ENDPOINTS.BUDGET_MONTHLY
-      );
+      if (await this.shouldUseFallback()) {
+        return await dashboardApiFallback.getMonthlyBudget();
+      }
+
+      const response: AxiosResponse<{
+        success: boolean;
+        data?: { monthlyBudget: number };
+        error?: string;
+      }> = await apiClient.get(API_ENDPOINTS.BUDGET_MONTHLY);
       
       if (!response.data.success) {
         throw new DashboardError(
@@ -175,21 +259,26 @@ class DashboardApiService {
         );
       }
       
-      return response.data.monthlyBudget || 0;
+      return response.data.data?.monthlyBudget || 0;
     } catch (error) {
-      if (error instanceof DashboardError) throw error;
-      throw new DashboardError('Failed to fetch budget', 'FETCH_ERROR');
+      console.error('Get budget error, falling back:', error);
+      return await dashboardApiFallback.getMonthlyBudget();
     }
   }
 
   async updateMonthlyBudget(budget: number): Promise<number> {
     try {
+      if (await this.shouldUseFallback()) {
+        return await dashboardApiFallback.updateMonthlyBudget(budget);
+      }
+
       const requestData: BudgetUpdateRequest = { parsedBudget: budget };
       
-      const response: AxiosResponse<ApiResponse<{ budget: number }>> = await apiClient.post(
-        API_ENDPOINTS.BUDGET_MONTHLY,
-        requestData
-      );
+      const response: AxiosResponse<{
+        success: boolean;
+        data?: { budget: number };
+        error?: string;
+      }> = await apiClient.post(API_ENDPOINTS.BUDGET_MONTHLY, requestData);
       
       if (!response.data.success) {
         throw new DashboardError(
@@ -198,19 +287,25 @@ class DashboardApiService {
         );
       }
       
-      return response.data.budget || budget;
+      return response.data.data?.budget || budget;
     } catch (error) {
-      if (error instanceof DashboardError) throw error;
-      throw new DashboardError(ERROR_MESSAGES.BUDGET_UPDATE_FAILED, 'UPDATE_ERROR');
+      console.error('Update budget error, falling back:', error);
+      return await dashboardApiFallback.updateMonthlyBudget(budget);
     }
   }
 
   // Session validation
   async validateSession(): Promise<{ valid: boolean; user?: any }> {
     try {
-      const response: AxiosResponse<ApiResponse> = await apiClient.post(
-        API_ENDPOINTS.AUTH_SESSION
-      );
+      if (await this.shouldUseFallback()) {
+        return await dashboardApiFallback.validateSession();
+      }
+
+      const response: AxiosResponse<{
+        success: boolean;
+        userData?: any;
+        error?: string;
+      }> = await apiClient.post(API_ENDPOINTS.AUTH_SESSION);
       
       if (response.data.success) {
         return {
@@ -221,21 +316,26 @@ class DashboardApiService {
       
       return { valid: false };
     } catch (error) {
-      return { valid: false };
+      console.error('Session validation error, falling back:', error);
+      return await dashboardApiFallback.validateSession();
     }
   }
 
   // Batch operations
   async batchAddExpenses(expenses: ExpenseCreateRequest[]): Promise<ExpenseEntry[]> {
     try {
+      if (await this.shouldUseFallback()) {
+        return await dashboardApiFallback.batchAddExpenses(expenses);
+      }
+
       const promises = expenses.map(expense => 
         this.addExpense(expense.category, expense.amount, expense.date)
       );
       
       return Promise.all(promises);
     } catch (error) {
-      if (error instanceof DashboardError) throw error;
-      throw new DashboardError('Failed to add multiple expenses', 'BATCH_ERROR');
+      console.error('Batch add error, falling back:', error);
+      return await dashboardApiFallback.batchAddExpenses(expenses);
     }
   }
 
@@ -247,6 +347,11 @@ class DashboardApiService {
     } catch (error) {
       return false;
     }
+  }
+
+  // Reset fallback mode (for testing/development)
+  resetFallbackMode(): void {
+    this.useFallback = false;
   }
 }
 

@@ -1,367 +1,223 @@
-import { NextResponse } from "next/server";
-import dbConnect from "@/lib/db";
-import Expense from "@/models/Expense";
-import User from "@/models/User";
-import { verifyToken, AuthError } from "@/lib/auth";
-import mongoose from "mongoose";
+// src/app/api/expenses/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import rateLimit from "@/lib/rate-limit";
-
-// Rate limiting
-const limiter = rateLimit({
-  interval: 60 * 1000, // 1 minute
-  uniqueTokenPerInterval: 500,
-});
+import { dashboardService } from "@/services/dashboardService";
+import { withAuth, withSecurityHeaders, withRateLimit } from "@/lib/auth";
+import { getClientIdentifier } from "@/lib/rate-limit";
+import { 
+  DashboardError, 
+  DashboardErrorCodes,
+  VALIDATION_CONSTANTS,
+  CreateExpenseRequest,
+  UpdateExpenseRequest,
+  ExpenseQueryParams
+} from "@/types/dashboard-backend";
+import { AuthTokenPayload } from "@/types/auth-backend";
 
 // Validation schemas
-const expenseCreateSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
-  category: z.enum(["food", "shopping", "travelling", "entertainment"], {
+const createExpenseSchema = z.object({
+  date: z.string()
+    .regex(VALIDATION_CONSTANTS.DATE_FORMAT, "Date must be in YYYY-MM-DD format")
+    .refine((date) => {
+      const expenseDate = new Date(date);
+      const today = new Date();
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      return expenseDate <= today && expenseDate >= oneYearAgo;
+    }, "Date must be within the last year and not in the future"),
+  category: z.enum(['food', 'shopping', 'travelling', 'entertainment'], {
     errorMap: () => ({ message: "Invalid category" })
   }),
   amount: z.number()
     .positive("Amount must be positive")
-    .max(10000, "Amount cannot exceed $10,000")
-    .refine((val) => Number.isFinite(val) && val > 0, "Invalid amount"),
+    .min(VALIDATION_CONSTANTS.MIN_AMOUNT, `Amount must be at least ${VALIDATION_CONSTANTS.MIN_AMOUNT}`)
+    .max(VALIDATION_CONSTANTS.MAX_AMOUNT, `Amount cannot exceed ${VALIDATION_CONSTANTS.MAX_AMOUNT}`)
+    .refine((val) => Number.isFinite(val), "Amount must be a valid number"),
 });
 
-// Date validation helper
-const validateExpenseDate = (dateString: string): boolean => {
-  const date = new Date(dateString);
-  const today = new Date();
-  const oneYearAgo = new Date();
-  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-  
-  return date <= today && date >= oneYearAgo;
-};
+const updateExpenseSchema = z.object({
+  expenseId: z.string().min(1, "Expense ID is required"),
+  updates: z.object({
+    food: z.number().min(0).max(VALIDATION_CONSTANTS.MAX_AMOUNT).optional(),
+    shopping: z.number().min(0).max(VALIDATION_CONSTANTS.MAX_AMOUNT).optional(),
+    travelling: z.number().min(0).max(VALIDATION_CONSTANTS.MAX_AMOUNT).optional(),
+    entertainment: z.number().min(0).max(VALIDATION_CONSTANTS.MAX_AMOUNT).optional(),
+  }).refine((updates) => {
+    return Object.values(updates).some(val => val !== undefined);
+  }, "At least one field must be updated"),
+});
 
-export async function GET(req: Request) {
-  try {
-    // Rate limiting
-    const clientId = req.headers.get("x-forwarded-for") || "anonymous";
-    await limiter.check(60, clientId); // 60 requests per minute for GET
+const queryParamsSchema = z.object({
+  startDate: z.string().regex(VALIDATION_CONSTANTS.DATE_FORMAT).optional(),
+  endDate: z.string().regex(VALIDATION_CONSTANTS.DATE_FORMAT).optional(),
+  category: z.enum(['food', 'shopping', 'travelling', 'entertainment']).optional(),
+  limit: z.coerce.number().min(1).max(VALIDATION_CONSTANTS.MAX_LIMIT).optional(),
+  offset: z.coerce.number().min(0).optional(),
+  sortBy: z.enum(['date', 'total', 'createdAt']).optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
+});
 
-    // Verify authentication
-    const authHeader = req.headers.get("authorization");
-    const user = verifyToken(authHeader);
-
-    await dbConnect();
-
-    // Validate user ID
-    if (!mongoose.Types.ObjectId.isValid(user.id)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid user ID format" },
-        { status: 400 }
-      );
-    }
-
-    // Fetch user's expenses with proper sorting
-    const expenses = await Expense.find({ 
-      user: new mongoose.Types.ObjectId(user.id) 
-    })
-    .sort({ date: 1 }) // Sort by date ascending
-    .lean() // Use lean() for better performance
-    .exec();
-
-    return NextResponse.json({ 
-      success: true, 
-      data: expenses,
-      count: expenses.length
-    });
-
-  } catch (error: any) {
-    console.error("Expense GET error:", error);
-
-    if (error instanceof AuthError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.statusCode }
-      );
-    }
-
-    if (error.name === 'RateLimitError') {
-      return NextResponse.json(
-        { success: false, error: "Too many requests. Please try again later." },
-        { status: 429 }
-      );
-    }
-
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch expenses" },
-      { status: 500 }
-    );
+// Helper function to create error response
+function createErrorResponse(error: DashboardError | z.ZodError | Error): NextResponse {
+  if (error instanceof z.ZodError) {
+    return NextResponse.json({
+      success: false,
+      error: "Validation failed",
+      details: error.issues.map(issue => ({
+        field: issue.path.join('.'),
+        message: issue.message
+      }))
+    }, { status: 400 });
   }
+
+  if (error instanceof DashboardError) {
+    return NextResponse.json({
+      success: false,
+      error: error.message,
+      code: error.code
+    }, { status: error.statusCode });
+  }
+
+  console.error('Unexpected expenses error:', error);
+  return NextResponse.json({
+    success: false,
+    error: "Internal server error"
+  }, { status: 500 });
 }
 
-export async function POST(req: Request) {
-  try {
-    // Rate limiting for POST (more restrictive)
-    const clientId = req.headers.get("x-forwarded-for") || "anonymous";
-    await limiter.check(30, clientId); // 30 requests per minute for POST
+// Helper function to create success response
+function createSuccessResponse(data: any, status: number = 200): NextResponse {
+  const response = NextResponse.json(data, { status });
+  
+  // Add security headers
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  
+  return response;
+}
 
-    // Verify authentication
-    const authHeader = req.headers.get("authorization");
-    const user = verifyToken(authHeader);
+// GET /api/expenses - Get user expenses
+export const GET = withSecurityHeaders(
+  withRateLimit(60)(
+    withAuth(async (req: NextRequest, user: AuthTokenPayload) => {
+      try {
+        const clientId = getClientIdentifier(req);
+        const { searchParams } = new URL(req.url);
 
-    // Parse and validate request body
-    const body = await req.json();
-    const validationResult = expenseCreateSchema.safeParse(body);
-    
-    if (!validationResult.success) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: "Validation failed",
-          details: validationResult.error.issues.map(issue => ({
-            field: issue.path.join('.'),
-            message: issue.message
-          }))
-        },
-        { status: 400 }
-      );
-    }
+        // Parse and validate query parameters
+        const queryParams = queryParamsSchema.parse({
+          startDate: searchParams.get('startDate'),
+          endDate: searchParams.get('endDate'),
+          category: searchParams.get('category'),
+          limit: searchParams.get('limit'),
+          offset: searchParams.get('offset'),
+          sortBy: searchParams.get('sortBy'),
+          sortOrder: searchParams.get('sortOrder'),
+        });
 
-    const { date, category, amount } = validationResult.data;
+        const result = await dashboardService.getExpenses(
+          user.id,
+          queryParams as ExpenseQueryParams,
+          clientId
+        );
 
-    // Additional date validation
-    if (!validateExpenseDate(date)) {
-      return NextResponse.json(
-        { success: false, error: "Date must be within the last year and not in the future" },
-        { status: 400 }
-      );
-    }
+        return createSuccessResponse(result);
 
-    await dbConnect();
+      } catch (error) {
+        return createErrorResponse(error as DashboardError | z.ZodError | Error);
+      }
+    })
+  )
+);
 
-    // Validate user ID
-    if (!mongoose.Types.ObjectId.isValid(user.id)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid user ID format" },
-        { status: 400 }
-      );
-    }
+// POST /api/expenses - Add new expense
+export const POST = withSecurityHeaders(
+  withRateLimit(30)(
+    withAuth(async (req: NextRequest, user: AuthTokenPayload) => {
+      try {
+        const clientId = getClientIdentifier(req);
+        
+        // Parse and validate request body
+        const body = await req.json();
+        const validatedData = createExpenseSchema.parse(body);
 
-    const userId = new mongoose.Types.ObjectId(user.id);
+        const result = await dashboardService.addExpense(
+          user.id,
+          validatedData as CreateExpenseRequest,
+          clientId
+        );
 
-    // Start a transaction for data consistency
-    const session = await mongoose.startSession();
-    
-    try {
-      await session.withTransaction(async () => {
-        // Find or create expense entry for the date
-        let expense = await Expense.findOne({ user: userId, date }).session(session);
+        return createSuccessResponse(result, 201);
 
-        if (expense) {
-          // Update existing expense
-          const currentAmount = expense[category] || 0;
-          const newAmount = currentAmount + amount;
-          
-          // Validate total doesn't exceed reasonable limits
-          if (newAmount > 10000) {
-            throw new Error(`Total ${category} expense for this date would exceed $10,000`);
-          }
-          
-          expense[category] = newAmount;
-          await expense.save({ session });
-        } else {
-          // Create new expense entry
-          expense = new Expense({
-            date,
-            food: 0,
-            shopping: 0,
-            travelling: 0,
-            entertainment: 0,
-            [category]: amount,
-            user: userId,
-          });
-          
-          await expense.save({ session });
-          
-          // Add expense reference to user (if not already present)
-          await User.findByIdAndUpdate(
-            userId,
-            { $addToSet: { expenses: expense._id } }, // Use $addToSet to avoid duplicates
-            { session }
+      } catch (error) {
+        return createErrorResponse(error as DashboardError | z.ZodError | Error);
+      }
+    })
+  )
+);
+
+// PUT /api/expenses - Update existing expense
+export const PUT = withSecurityHeaders(
+  withRateLimit(20)(
+    withAuth(async (req: NextRequest, user: AuthTokenPayload) => {
+      try {
+        const clientId = getClientIdentifier(req);
+        
+        // Parse and validate request body
+        const body = await req.json();
+        const validatedData = updateExpenseSchema.parse(body);
+
+        const result = await dashboardService.updateExpense(
+          user.id,
+          validatedData as UpdateExpenseRequest,
+          clientId
+        );
+
+        return createSuccessResponse(result);
+
+      } catch (error) {
+        return createErrorResponse(error as DashboardError | z.ZodError | Error);
+      }
+    })
+  )
+);
+
+// DELETE /api/expenses - Delete expense
+export const DELETE = withSecurityHeaders(
+  withRateLimit(10)(
+    withAuth(async (req: NextRequest, user: AuthTokenPayload) => {
+      try {
+        const clientId = getClientIdentifier(req);
+        const { searchParams } = new URL(req.url);
+        
+        const expenseId = searchParams.get('id');
+        if (!expenseId) {
+          throw new DashboardError(
+            "Expense ID is required",
+            DashboardErrorCodes.VALIDATION_ERROR,
+            400
           );
         }
-      });
 
-      // Fetch the updated expense
-      const updatedExpense = await Expense.findOne({ user: userId, date }).lean();
+        const result = await dashboardService.deleteExpense(
+          user.id,
+          expenseId,
+          clientId
+        );
 
-      return NextResponse.json({ 
-        success: true, 
-        data: [updatedExpense],
-        message: `$${amount.toFixed(2)} added to ${category}`
-      }, { status: 201 });
+        return createSuccessResponse(result);
 
-    } finally {
-      await session.endSession();
-    }
-
-  } catch (error: any) {
-    console.error("Expense POST error:", error);
-
-    if (error instanceof AuthError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.statusCode }
-      );
-    }
-
-    if (error.name === 'RateLimitError') {
-      return NextResponse.json(
-        { success: false, error: "Too many requests. Please try again later." },
-        { status: 429 }
-      );
-    }
-
-    // Handle MongoDB validation errors
-    if (error.name === 'ValidationError') {
-      return NextResponse.json(
-        { success: false, error: "Invalid expense data" },
-        { status: 400 }
-      );
-    }
-
-    // Handle duplicate key errors
-    if (error.code === 11000) {
-      return NextResponse.json(
-        { success: false, error: "Expense entry already exists for this date" },
-        { status: 409 }
-      );
-    }
-
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to add expense" },
-      { status: 500 }
-    );
-  }
-}
-
-// Optional: Add PUT method for updating expenses
-export async function PUT(req: Request) {
-  try {
-    const clientId = req.headers.get("x-forwarded-for") || "anonymous";
-    await limiter.check(20, clientId);
-
-    const authHeader = req.headers.get("authorization");
-    const user = verifyToken(authHeader);
-
-    const body = await req.json();
-    const { expenseId, updates } = body;
-
-    if (!mongoose.Types.ObjectId.isValid(expenseId)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid expense ID" },
-        { status: 400 }
-      );
-    }
-
-    await dbConnect();
-
-    const expense = await Expense.findOne({
-      _id: expenseId,
-      user: new mongoose.Types.ObjectId(user.id)
-    });
-
-    if (!expense) {
-      return NextResponse.json(
-        { success: false, error: "Expense not found" },
-        { status: 404 }
-      );
-    }
-
-    // Update only allowed fields
-    const allowedUpdates = ['food', 'shopping', 'travelling', 'entertainment'];
-    Object.keys(updates).forEach(key => {
-      if (allowedUpdates.includes(key) && typeof updates[key] === 'number' && updates[key] >= 0) {
-        expense[key] = updates[key];
+      } catch (error) {
+        return createErrorResponse(error as DashboardError | z.ZodError | Error);
       }
-    });
+    })
+  )
+);
 
-    await expense.save();
-
-    return NextResponse.json({
-      success: true,
-      data: expense,
-      message: "Expense updated successfully"
-    });
-
-  } catch (error: any) {
-    console.error("Expense PUT error:", error);
-
-    if (error instanceof AuthError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.statusCode }
-      );
-    }
-
-    return NextResponse.json(
-      { success: false, error: "Failed to update expense" },
-      { status: 500 }
-    );
-  }
-}
-
-// Optional: Add DELETE method for removing expenses
-export async function DELETE(req: Request) {
-  try {
-    const clientId = req.headers.get("x-forwarded-for") || "anonymous";
-    await limiter.check(10, clientId);
-
-    const authHeader = req.headers.get("authorization");
-    const user = verifyToken(authHeader);
-
-    const { searchParams } = new URL(req.url);
-    const expenseId = searchParams.get('id');
-
-    if (!expenseId || !mongoose.Types.ObjectId.isValid(expenseId)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid expense ID" },
-        { status: 400 }
-      );
-    }
-
-    await dbConnect();
-
-    const expense = await Expense.findOneAndDelete({
-      _id: expenseId,
-      user: new mongoose.Types.ObjectId(user.id)
-    });
-
-    if (!expense) {
-      return NextResponse.json(
-        { success: false, error: "Expense not found" },
-        { status: 404 }
-      );
-    }
-
-    // Remove expense reference from user
-    await User.findByIdAndUpdate(
-      user.id,
-      { $pull: { expenses: expenseId } }
-    );
-
-    return NextResponse.json({
-      success: true,
-      message: "Expense deleted successfully"
-    });
-
-  } catch (error: any) {
-    console.error("Expense DELETE error:", error);
-
-    if (error instanceof AuthError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.statusCode }
-      );
-    }
-
-    return NextResponse.json(
-      { success: false, error: "Failed to delete expense" },
-      { status: 500 }
-    );
-  }
+// Handle unsupported methods
+export async function PATCH() {
+  return NextResponse.json({
+    success: false,
+    error: "Method not allowed"
+  }, { status: 405 });
 }

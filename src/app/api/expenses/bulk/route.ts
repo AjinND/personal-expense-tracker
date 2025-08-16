@@ -1,4 +1,4 @@
-// src/app/api/budget/monthly/route.ts
+// src/app/api/expenses/bulk/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { dashboardService } from "@/services/dashboardService";
@@ -7,16 +7,35 @@ import { getClientIdentifier } from "@/lib/rate-limit";
 import { 
   DashboardError,
   VALIDATION_CONSTANTS,
-  BudgetRequest
+  CreateExpenseRequest
 } from "@/types/dashboard-backend";
 import { AuthTokenPayload } from "@/types/auth-backend";
 
-// Validation schema for budget updates
-const budgetSchema = z.object({
-  parsedBudget: z.number()
-    .min(VALIDATION_CONSTANTS.MIN_BUDGET, "Budget cannot be negative")
-    .max(VALIDATION_CONSTANTS.MAX_BUDGET, `Budget cannot exceed ${VALIDATION_CONSTANTS.MAX_BUDGET}`)
-    .refine((val) => Number.isFinite(val), "Budget must be a valid number"),
+// Validation schema for bulk expense import
+const bulkExpenseSchema = z.object({
+  expenses: z.array(
+    z.object({
+      date: z.string()
+        .regex(VALIDATION_CONSTANTS.DATE_FORMAT, "Date must be in YYYY-MM-DD format")
+        .refine((date) => {
+          const expenseDate = new Date(date);
+          const today = new Date();
+          const oneYearAgo = new Date();
+          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+          return expenseDate <= today && expenseDate >= oneYearAgo;
+        }, "Date must be within the last year and not in the future"),
+      category: z.enum(['food', 'shopping', 'travelling', 'entertainment'], {
+        errorMap: () => ({ message: "Invalid category" })
+      }),
+      amount: z.number()
+        .positive("Amount must be positive")
+        .min(VALIDATION_CONSTANTS.MIN_AMOUNT, `Amount must be at least ${VALIDATION_CONSTANTS.MIN_AMOUNT}`)
+        .max(VALIDATION_CONSTANTS.MAX_AMOUNT, `Amount cannot exceed ${VALIDATION_CONSTANTS.MAX_AMOUNT}`)
+        .refine((val) => Number.isFinite(val), "Amount must be a valid number"),
+    })
+  )
+  .min(1, "At least one expense is required")
+  .max(100, "Cannot import more than 100 expenses at once")
 });
 
 // Helper function to create error response
@@ -40,7 +59,7 @@ function createErrorResponse(error: DashboardError | z.ZodError | Error): NextRe
     }, { status: error.statusCode });
   }
 
-  console.error('Unexpected budget error:', error);
+  console.error('Unexpected bulk import error:', error);
   return NextResponse.json({
     success: false,
     error: "Internal server error"
@@ -58,45 +77,34 @@ function createSuccessResponse(data: any, status: number = 200): NextResponse {
   return response;
 }
 
-// POST /api/budget/monthly - Update monthly budget
+// POST /api/expenses/bulk - Bulk import expenses
 export const POST = withSecurityHeaders(
-  withRateLimit(10)(
+  withRateLimit(5)( // Very restrictive rate limit for bulk operations
     withAuth(async (req: NextRequest, user: AuthTokenPayload) => {
       try {
         const clientId = getClientIdentifier(req);
         
+        // Check content length (max 1MB for bulk operations)
+        const contentLength = req.headers.get('content-length');
+        if (contentLength && parseInt(contentLength) > 1024 * 1024) {
+          throw new DashboardError(
+            "Request body too large for bulk import",
+            "PAYLOAD_TOO_LARGE",
+            413
+          );
+        }
+        
         // Parse and validate request body
         const body = await req.json();
-        const validatedData = budgetSchema.parse(body);
+        const validatedData = bulkExpenseSchema.parse(body);
 
-        const result = await dashboardService.updateMonthlyBudget(
+        const result = await dashboardService.bulkImportExpenses(
           user.id,
-          validatedData as BudgetRequest,
+          validatedData.expenses as CreateExpenseRequest[],
           clientId
         );
 
-        return createSuccessResponse(result);
-
-      } catch (error) {
-        return createErrorResponse(error as DashboardError | z.ZodError | Error);
-      }
-    })
-  )
-);
-
-// GET /api/budget/monthly - Get monthly budget
-export const GET = withSecurityHeaders(
-  withRateLimit(60)(
-    withAuth(async (req: NextRequest, user: AuthTokenPayload) => {
-      try {
-        const clientId = getClientIdentifier(req);
-
-        const result = await dashboardService.getMonthlyBudget(
-          user.id,
-          clientId
-        );
-
-        return createSuccessResponse(result);
+        return createSuccessResponse(result, 201);
 
       } catch (error) {
         return createErrorResponse(error as DashboardError | z.ZodError | Error);
@@ -106,6 +114,13 @@ export const GET = withSecurityHeaders(
 );
 
 // Handle unsupported methods
+export async function GET() {
+  return NextResponse.json({
+    success: false,
+    error: "Method not allowed"
+  }, { status: 405 });
+}
+
 export async function PUT() {
   return NextResponse.json({
     success: false,
@@ -114,13 +129,6 @@ export async function PUT() {
 }
 
 export async function DELETE() {
-  return NextResponse.json({
-    success: false,
-    error: "Method not allowed"
-  }, { status: 405 });
-}
-
-export async function PATCH() {
   return NextResponse.json({
     success: false,
     error: "Method not allowed"
