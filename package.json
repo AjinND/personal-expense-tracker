@@ -6,7 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "migrate:users": "ts-node scripts/migrate-users.ts",
+    "security:audit": "npm audit",
+    "security:check": "npm audit --audit-level moderate",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -39,15 +46,52 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/jest": "^29.5.12",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/mongoose": "^5.11.96",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@types/supertest": "^6.0.2",
     "eslint": "^8",
     "eslint-config-next": "15.0.3",
+    "jest": "^29.7.0",
+    "jest-environment-node": "^29.7.0",
     "postcss": "^8",
+    "supertest": "^7.0.0",
     "tailwindcss": "^3.4.1",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/src", "<rootDir>/tests"],
+    "testMatch": [
+      "**/__tests__/**/*.+(ts|tsx|js)",
+      "**/*.(test|spec).+(ts|tsx|js)"
+    ],
+    "transform": {
+      "^.+\\.(ts|tsx)$": "ts-jest"
+    },
+    "collectCoverageFrom": [
+      "src/**/*.{ts,tsx}",
+      "!src/**/*.d.ts",
+      "!src/**/*.test.{ts,tsx}",
+      "!src/**/__tests__/**"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 70,
+        "lines": 70,
+        "statements": 70
+      }
+    },
+    "setupFilesAfterEnv": ["<rootDir>/tests/setup.ts"],
+    "moduleNameMapping": {
+      "^@/(.*)$": "<rootDir>/src/$1"
+    }
   }
 }

@@ -50,10 +50,14 @@ export default function rateLimit(config: RateLimitConfig) {
 export function getClientIdentifier(req: NextRequest): string {
   const forwarded = req.headers.get('x-forwarded-for');
   const real = req.headers.get('x-real-ip');
-  const ip = forwarded?.split(',')[0] || real || req.ip || 'unknown';
+  // Note: req.ip might not be available in Next.js Edge Runtime
+  const ip = forwarded?.split(',')[0] || real || 'unknown';
   
   // You could also include user agent for more granular limiting
   const userAgent = req.headers.get('user-agent') || '';
   
   return `${ip}:${userAgent.slice(0, 50)}`;
 }
+
+// Export the RateLimitError for use in other files
+export { RateLimitError };

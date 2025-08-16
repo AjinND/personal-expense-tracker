@@ -56,36 +56,56 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
   const handleError = useCallback((error: unknown, context: string) => {
     console.error(`Dashboard error in ${context}:`, error);
     
-    let errorMessage = ERROR_MESSAGES.SERVER_ERROR;
+    let errorMessage :string = ERROR_MESSAGES.SERVER_ERROR;
+    let shouldLogout = false;
     
     if (error instanceof DashboardError) {
       errorMessage = error.message;
       
-      if (error.code === 'SESSION_EXPIRED') {
-        toast({
-          title: 'Session Expired',
-          description: 'Please login again.',
-          variant: 'destructive',
-        });
-        onLogout();
-        return;
+      if (error.code === 'SESSION_EXPIRED' || error.statusCode === 401) {
+        shouldLogout = true;
+        errorMessage = 'Your session has expired. Please login again.';
+      }
+    } else if (error instanceof Error) {
+      // Handle network errors or other JavaScript errors
+      if (error.message.includes('Network Error') || error.message.includes('fetch')) {
+        errorMessage = 'Network error. Please check your connection.';
+      } else {
+        errorMessage = error.message || ERROR_MESSAGES.SERVER_ERROR;
       }
     }
     
-    setState(prev => ({ ...prev, error: errorMessage, loading: false, refreshing: false }));
+    setState(prev => ({ 
+      ...prev, 
+      error: errorMessage, 
+      loading: false, 
+      refreshing: false 
+    }));
     
-    toast({
-      title: 'Error',
-      description: errorMessage,
-      variant: 'destructive',
-    });
+    if (shouldLogout) {
+      toast({
+        title: 'Session Expired',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      setTimeout(() => onLogout(), 1500);
+    } else {
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    }
   }, [toast, onLogout]);
 
-  // Fetch expenses
+  // Fetch expenses with better error handling
   const fetchExpenses = useCallback(async () => {
     try {
+      console.log('Fetching expenses...');
       const expenses = await dashboardApi.getExpenses();
-      const sortedExpenses = sortExpensesByDate(expenses);
+      console.log('Expenses fetched:', expenses);
+      
+      const sortedExpenses = sortExpensesByDate(expenses || []);
       
       setState(prev => ({
         ...prev,
@@ -93,27 +113,42 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
         error: null,
       }));
     } catch (error) {
+      console.error('Fetch expenses failed:', error);
       handleError(error, 'fetchExpenses');
     }
   }, [handleError]);
 
-  // Fetch monthly budget
+  // Fetch monthly budget with better error handling
   const fetchMonthlyBudget = useCallback(async () => {
     try {
+      console.log('Fetching monthly budget...');
       const budget = await dashboardApi.getMonthlyBudget();
-      setState(prev => ({ ...prev, totalBalance: budget }));
+      console.log('Budget fetched:', budget);
+      
+      setState(prev => ({ 
+        ...prev, 
+        totalBalance: budget || 0 
+      }));
     } catch (error) {
+      console.error('Fetch budget failed:', error);
       handleError(error, 'fetchMonthlyBudget');
     }
   }, [handleError]);
 
-  // Initial data load
+  // Initial data load with sequential loading for better error tracking
   const loadInitialData = useCallback(async () => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      await Promise.all([fetchExpenses(), fetchMonthlyBudget()]);
+      console.log('Starting initial data load...');
+      
+      // Load data sequentially to better identify which call fails
+      await fetchExpenses();
+      await fetchMonthlyBudget();
+      
+      console.log('Initial data load completed successfully');
     } catch (error) {
+      console.error('Initial data load failed:', error);
       handleError(error, 'loadInitialData');
     } finally {
       setState(prev => ({ ...prev, loading: false }));
@@ -125,7 +160,8 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
     setState(prev => ({ ...prev, refreshing: true, error: null }));
     
     try {
-      await Promise.all([fetchExpenses(), fetchMonthlyBudget()]);
+      await fetchExpenses();
+      await fetchMonthlyBudget();
       
       toast({
         title: 'Success',
@@ -179,12 +215,16 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
         return sortExpensesByDate(updated);
       } else {
         const newEntry: ExpenseEntry = {
+          _id: `temp-${Date.now()}`, // Temporary ID
           date,
           food: 0,
           shopping: 0,
           travelling: 0,
           entertainment: 0,
           [category]: amount,
+          user: 'current-user',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         };
         return sortExpensesByDate([...prevExpenses, newEntry]);
       }
@@ -201,7 +241,9 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
       
       // Update with server response
       setState(prev => {
-        const updated = prev.expenseData.filter(exp => exp.date !== updatedExpense.date);
+        const updated = prev.expenseData.filter(exp => 
+          exp.date !== updatedExpense.date || exp._id?.startsWith('temp-')
+        );
         return {
           ...prev,
           expenseData: sortExpensesByDate([...updated, updatedExpense]),
@@ -254,6 +296,7 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
 
   // Initialize dashboard
   useEffect(() => {
+    console.log('Dashboard hook initializing...');
     loadInitialData();
   }, [loadInitialData]);
 
@@ -330,17 +373,27 @@ export const useExpenseOperations = () => {
 // Hook for chart data
 export const useChartData = (expenses: ExpenseEntry[], dateRange: DateRange | null) => {
   return useMemo(() => {
-    const { prepareChartData, preparePieChartData, filterExpensesByDateRange, calculateCategoryTotals } = require('@/lib/dashboard-utils');
-    
-    const filteredExpenses = filterExpensesByDateRange(expenses, dateRange);
-    const chartData = prepareChartData(filteredExpenses);
-    const categoryTotals = calculateCategoryTotals(filteredExpenses);
-    const pieChartData = preparePieChartData(categoryTotals);
-    
-    return {
-      lineChartData: chartData,
-      pieChartData,
-      barChartData: chartData,
-    };
+    try {
+      // Dynamic import to avoid issues
+      const { prepareChartData, preparePieChartData, filterExpensesByDateRange, calculateCategoryTotals } = require('@/lib/dashboard-utils');
+      
+      const filteredExpenses = filterExpensesByDateRange(expenses, dateRange);
+      const chartData = prepareChartData(filteredExpenses);
+      const categoryTotals = calculateCategoryTotals(filteredExpenses);
+      const pieChartData = preparePieChartData(categoryTotals);
+      
+      return {
+        lineChartData: chartData,
+        pieChartData,
+        barChartData: chartData,
+      };
+    } catch (error) {
+      console.error('Chart data processing error:', error);
+      return {
+        lineChartData: [],
+        pieChartData: [],
+        barChartData: [],
+      };
+    }
   }, [expenses, dateRange]);
 };

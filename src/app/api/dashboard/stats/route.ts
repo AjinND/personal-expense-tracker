@@ -1,4 +1,4 @@
-// src/app/api/budget/monthly/route.ts
+// src/app/api/dashboard/stats/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { dashboardService } from "@/services/dashboardService";
@@ -6,18 +6,20 @@ import { withAuth, withSecurityHeaders, withRateLimit } from "@/lib/auth";
 import { getClientIdentifier } from "@/lib/rate-limit";
 import { 
   DashboardError,
-  VALIDATION_CONSTANTS,
-  BudgetRequest
+  VALIDATION_CONSTANTS
 } from "@/types/dashboard-backend";
 import { AuthTokenPayload } from "@/types/auth-backend";
 
-// Validation schema for budget updates
-const budgetSchema = z.object({
-  parsedBudget: z.number()
-    .min(VALIDATION_CONSTANTS.MIN_BUDGET, "Budget cannot be negative")
-    .max(VALIDATION_CONSTANTS.MAX_BUDGET, `Budget cannot exceed ${VALIDATION_CONSTANTS.MAX_BUDGET}`)
-    .refine((val) => Number.isFinite(val), "Budget must be a valid number"),
-});
+// Validation schema for stats query parameters
+const statsQuerySchema = z.object({
+  startDate: z.string().regex(VALIDATION_CONSTANTS.DATE_FORMAT).optional(),
+  endDate: z.string().regex(VALIDATION_CONSTANTS.DATE_FORMAT).optional(),
+}).refine((data) => {
+  if (data.startDate && data.endDate) {
+    return new Date(data.startDate) <= new Date(data.endDate);
+  }
+  return true;
+}, "Start date must be before or equal to end date");
 
 // Helper function to create error response
 function createErrorResponse(error: DashboardError | z.ZodError | Error): NextResponse {
@@ -40,7 +42,7 @@ function createErrorResponse(error: DashboardError | z.ZodError | Error): NextRe
     }, { status: error.statusCode });
   }
 
-  console.error('Unexpected budget error:', error);
+  console.error('Unexpected stats error:', error);
   return NextResponse.json({
     success: false,
     error: "Internal server error"
@@ -53,46 +55,29 @@ function createSuccessResponse(data: any, status: number = 200): NextResponse {
   
   // Add security headers
   response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  response.headers.set('Cache-Control', 'private, max-age=300'); // Cache for 5 minutes
   
   return response;
 }
 
-// POST /api/budget/monthly - Update monthly budget
-export const POST = withSecurityHeaders(
-  withRateLimit(10)(
-    withAuth(async (req: NextRequest, user: AuthTokenPayload) => {
-      try {
-        const clientId = getClientIdentifier(req);
-        
-        // Parse and validate request body
-        const body = await req.json();
-        const validatedData = budgetSchema.parse(body);
-
-        const result = await dashboardService.updateMonthlyBudget(
-          user.id,
-          validatedData as BudgetRequest,
-          clientId
-        );
-
-        return createSuccessResponse(result);
-
-      } catch (error) {
-        return createErrorResponse(error as DashboardError | z.ZodError | Error);
-      }
-    })
-  )
-);
-
-// GET /api/budget/monthly - Get monthly budget
+// GET /api/dashboard/stats - Get expense statistics
 export const GET = withSecurityHeaders(
-  withRateLimit(60)(
+  withRateLimit(30)(
     withAuth(async (req: NextRequest, user: AuthTokenPayload) => {
       try {
         const clientId = getClientIdentifier(req);
+        const { searchParams } = new URL(req.url);
 
-        const result = await dashboardService.getMonthlyBudget(
+        // Parse and validate query parameters
+        const queryParams = statsQuerySchema.parse({
+          startDate: searchParams.get('startDate'),
+          endDate: searchParams.get('endDate'),
+        });
+
+        const result = await dashboardService.getExpenseStats(
           user.id,
+          queryParams.startDate,
+          queryParams.endDate,
           clientId
         );
 
@@ -106,6 +91,13 @@ export const GET = withSecurityHeaders(
 );
 
 // Handle unsupported methods
+export async function POST() {
+  return NextResponse.json({
+    success: false,
+    error: "Method not allowed"
+  }, { status: 405 });
+}
+
 export async function PUT() {
   return NextResponse.json({
     success: false,
@@ -114,13 +106,6 @@ export async function PUT() {
 }
 
 export async function DELETE() {
-  return NextResponse.json({
-    success: false,
-    error: "Method not allowed"
-  }, { status: 405 });
-}
-
-export async function PATCH() {
   return NextResponse.json({
     success: false,
     error: "Method not allowed"
