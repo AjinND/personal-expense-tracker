@@ -99,24 +99,49 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
   }, [toast, onLogout]);
 
   // Fetch expenses with better error handling
+  // const fetchExpenses = useCallback(async () => {
+  //   try {
+  //     console.log('Fetching expenses...');
+  //     const expenses = await dashboardApi.getExpenses();
+  //     console.log('Expenses fetched:', expenses);
+      
+  //     const sortedExpenses = sortExpensesByDate(expenses || []);
+      
+  //     setState(prev => ({
+  //       ...prev,
+  //       expenseData: sortedExpenses,
+  //       error: null,
+  //     }));
+  //   } catch (error) {
+  //     console.error('Fetch expenses failed:', error);
+  //     handleError(error, 'fetchExpenses');
+  //   }
+  // }, [handleError]);
   const fetchExpenses = useCallback(async () => {
-    try {
-      console.log('Fetching expenses...');
-      const expenses = await dashboardApi.getExpenses();
-      console.log('Expenses fetched:', expenses);
-      
-      const sortedExpenses = sortExpensesByDate(expenses || []);
-      
-      setState(prev => ({
-        ...prev,
-        expenseData: sortedExpenses,
-        error: null,
-      }));
-    } catch (error) {
-      console.error('Fetch expenses failed:', error);
-      handleError(error, 'fetchExpenses');
-    }
-  }, [handleError]);
+  try {
+    console.log('Fetching expenses...');
+    
+    // Provide default parameters that the API expects
+    const expenses = await dashboardApi.getExpenses({
+      sortBy: 'date',
+      sortOrder: 'desc',
+      limit: 50  // reasonable default
+    });
+    
+    console.log('Expenses fetched:', expenses);
+    
+    const sortedExpenses = sortExpensesByDate(expenses || []);
+    
+    setState(prev => ({
+      ...prev,
+      expenseData: sortedExpenses,
+      error: null,
+    }));
+  } catch (error) {
+    console.error('Fetch expenses failed:', error);
+    handleError(error, 'fetchExpenses');
+  }
+}, [handleError]);
 
   // Fetch monthly budget with better error handling
   const fetchMonthlyBudget = useCallback(async () => {
