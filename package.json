@@ -4,16 +4,23 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:debug": "DEBUG=true next dev",
+    "dev:no-debug": "DEBUG=false next dev",
     "build": "next build",
+    "build:analyze": "ANALYZE=true next build",
     "start": "next start",
+    "start:production": "NODE_ENV=production next start",
     "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "type-check": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "migrate:users": "ts-node scripts/migrate-users.ts",
     "security:audit": "npm audit",
     "security:check": "npm audit --audit-level moderate",
-    "type-check": "tsc --noEmit"
+    "clean": "rm -rf .next out coverage",
+    "postinstall": "npm run type-check"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -25,6 +32,9 @@
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toast": "^1.2.2",
+    "@tailwindcss/aspect-ratio": "^0.4.2",
+    "@tailwindcss/forms": "^0.5.9",
+    "@tailwindcss/typography": "^0.5.15",
     "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
@@ -35,6 +45,7 @@
     "lucide-react": "^0.462.0",
     "mongoose": "^8.8.3",
     "next": "15.0.3",
+    "next-themes": "^0.3.0",
     "react": "^18.2.0",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.2.0",
@@ -45,6 +56,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^15.0.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/jest": "^29.5.12",
     "@types/jsonwebtoken": "^9.0.7",

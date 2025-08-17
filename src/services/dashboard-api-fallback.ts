@@ -2,6 +2,7 @@
 /**
  * Fallback service for dashboard API when backend is not ready
  * This provides mock data to prevent frontend crashes during development
+ * ONLY USED IN DEVELOPMENT ENVIRONMENT WHEN REAL API FAILS
  */
 
 import { ExpenseEntry, ExpenseCategory } from '@/types/dashboard';
@@ -48,10 +49,18 @@ let mockBudget = 2000;
 
 export class DashboardApiFallback {
   private expenses: ExpenseEntry[] = [...mockExpenses];
+  private isDevelopment = process.env.NODE_ENV === 'development';
+
+  private logFallbackUsage(operation: string) {
+    if (this.isDevelopment) {
+      console.log(`🔧 [DEVELOPMENT FALLBACK] Using mock data for ${operation}`);
+    }
+  }
 
   async getExpenses(): Promise<ExpenseEntry[]> {
-    console.warn('Using fallback dashboard API - expenses');
-    // Simulate API delay
+    this.logFallbackUsage('getExpenses');
+    
+    // Simulate API delay for realistic development experience
     await new Promise(resolve => setTimeout(resolve, 500));
     return [...this.expenses];
   }
@@ -61,7 +70,7 @@ export class DashboardApiFallback {
     amount: number,
     date: string
   ): Promise<ExpenseEntry> {
-    console.warn('Using fallback dashboard API - add expense');
+    this.logFallbackUsage('addExpense');
     await new Promise(resolve => setTimeout(resolve, 300));
 
     const existingExpenseIndex = this.expenses.findIndex(exp => exp.date === date);
@@ -75,6 +84,7 @@ export class DashboardApiFallback {
         updatedAt: new Date().toISOString()
       };
       this.expenses[existingExpenseIndex] = updatedExpense;
+      console.log(`✅ [MOCK] Updated expense for ${date}: +$${amount} to ${category}`);
       return updatedExpense;
     } else {
       // Create new expense
@@ -91,6 +101,7 @@ export class DashboardApiFallback {
         updatedAt: new Date().toISOString()
       };
       this.expenses.push(newExpense);
+      console.log(`✅ [MOCK] Created new expense for ${date}: $${amount} in ${category}`);
       return newExpense;
     }
   }
@@ -99,12 +110,12 @@ export class DashboardApiFallback {
     expenseId: string,
     updates: Partial<Pick<ExpenseEntry, 'food' | 'shopping' | 'travelling' | 'entertainment'>>
   ): Promise<ExpenseEntry> {
-    console.warn('Using fallback dashboard API - update expense');
+    this.logFallbackUsage('updateExpense');
     await new Promise(resolve => setTimeout(resolve, 300));
 
     const expenseIndex = this.expenses.findIndex(exp => exp._id === expenseId);
     if (expenseIndex === -1) {
-      throw new Error('Expense not found');
+      throw new Error(`Mock expense with ID ${expenseId} not found`);
     }
 
     const updatedExpense = {
@@ -114,64 +125,90 @@ export class DashboardApiFallback {
     };
     
     this.expenses[expenseIndex] = updatedExpense;
+    console.log(`✅ [MOCK] Updated expense ${expenseId}:`, updates);
     return updatedExpense;
   }
 
   async deleteExpense(expenseId: string): Promise<void> {
-    console.warn('Using fallback dashboard API - delete expense');
+    this.logFallbackUsage('deleteExpense');
     await new Promise(resolve => setTimeout(resolve, 300));
 
     const expenseIndex = this.expenses.findIndex(exp => exp._id === expenseId);
     if (expenseIndex === -1) {
-      throw new Error('Expense not found');
+      throw new Error(`Mock expense with ID ${expenseId} not found`);
     }
 
     this.expenses.splice(expenseIndex, 1);
+    console.log(`✅ [MOCK] Deleted expense ${expenseId}`);
   }
 
   async getMonthlyBudget(): Promise<number> {
-    console.warn('Using fallback dashboard API - get budget');
+    this.logFallbackUsage('getMonthlyBudget');
     await new Promise(resolve => setTimeout(resolve, 200));
+    console.log(`💰 [MOCK] Current budget: $${mockBudget}`);
     return mockBudget;
   }
 
   async updateMonthlyBudget(budget: number): Promise<number> {
-    console.warn('Using fallback dashboard API - update budget');
+    this.logFallbackUsage('updateMonthlyBudget');
     await new Promise(resolve => setTimeout(resolve, 300));
+    const oldBudget = mockBudget;
     mockBudget = budget;
+    console.log(`💰 [MOCK] Budget updated: $${oldBudget} → $${mockBudget}`);
     return mockBudget;
   }
 
   async validateSession(): Promise<{ valid: boolean; user?: any }> {
-    console.warn('Using fallback dashboard API - validate session');
+    this.logFallbackUsage('validateSession');
     return {
       valid: true,
       user: {
         id: 'mock-user',
-        name: 'Mock User',
+        name: 'Mock User (Development)',
         email: 'mock@example.com'
       }
     };
   }
 
   async batchAddExpenses(expenses: any[]): Promise<ExpenseEntry[]> {
-    console.warn('Using fallback dashboard API - batch add');
+    this.logFallbackUsage('batchAddExpenses');
     const results: ExpenseEntry[] = [];
+    
+    console.log(`📦 [MOCK] Processing batch of ${expenses.length} expenses`);
     
     for (const expense of expenses) {
       try {
         const result = await this.addExpense(expense.category, expense.amount, expense.date);
         results.push(result);
       } catch (error) {
-        console.warn('Failed to add expense in batch:', error);
+        console.warn(`⚠️ [MOCK] Failed to add expense in batch:`, error);
       }
     }
     
+    console.log(`✅ [MOCK] Batch processing complete. Added ${results.length}/${expenses.length} expenses`);
     return results;
   }
 
   async healthCheck(): Promise<boolean> {
-    return false; // Always return false for fallback
+    // Fallback health check always returns false since it's not the real API
+    return false;
+  }
+
+  // Reset mock data to initial state
+  resetMockData(): void {
+    this.expenses = [...mockExpenses];
+    mockBudget = 2000;
+    if (this.isDevelopment) {
+      console.log('🔄 [MOCK] Reset all mock data to initial state');
+    }
+  }
+
+  // Get current mock state for debugging
+  getMockState(): { expenses: ExpenseEntry[]; budget: number } {
+    return {
+      expenses: [...this.expenses],
+      budget: mockBudget
+    };
   }
 }
 
