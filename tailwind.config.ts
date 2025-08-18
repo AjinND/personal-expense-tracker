@@ -220,6 +220,10 @@ const config: Config = {
         'float': 'float 3s ease-in-out infinite',
         'wiggle': 'wiggle 1s ease-in-out infinite',
       },
+      animationDelay: {
+        '2000': '2s',
+        '4000': '4s',
+      },
       
       // Box shadows
       boxShadow: {
