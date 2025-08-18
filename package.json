@@ -24,12 +24,14 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
+    "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-label": "^2.1.0",
     "@radix-ui/react-popover": "^1.1.2",
     "@radix-ui/react-progress": "^1.1.7",
     "@radix-ui/react-select": "^2.1.2",
     "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toast": "^1.2.2",
     "@tailwindcss/aspect-ratio": "^0.4.2",
@@ -79,7 +81,10 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "roots": ["<rootDir>/src", "<rootDir>/tests"],
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/tests"
+    ],
     "testMatch": [
       "**/__tests__/**/*.+(ts|tsx|js)",
       "**/*.(test|spec).+(ts|tsx|js)"
@@ -101,7 +106,9 @@
         "statements": 70
       }
     },
-    "setupFilesAfterEnv": ["<rootDir>/tests/setup.ts"],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.ts"
+    ],
     "moduleNameMapping": {
       "^@/(.*)$": "<rootDir>/src/$1"
     }
