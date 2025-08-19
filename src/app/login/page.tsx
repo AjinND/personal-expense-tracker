@@ -1,32 +1,41 @@
 // src/app/login/page.tsx
 "use client";
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { AuthenticationPage } from '@/components/auth/AuthenticationPage';
-import { User } from '@/types/auth';
+import React from 'react';
+import { AuthGuard, useAuth } from '@/components/auth/AuthGuard';
+import AuthenticationPage from '@/components/login/login';
+import { Redirect } from '@/components/common/Redirect';
 
 export default function LoginPage() {
-  const router = useRouter();
+  return (
+    <AuthGuard requireAuth={false}>
+      <LoginContent />
+    </AuthGuard>
+  );
+}
 
-  // Check if user is already authenticated
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      // Redirect to dashboard if already authenticated
-      router.push('/');
-    }
-  }, [router]);
+function LoginContent() {
+  const { user, login } = useAuth();
 
-  const handleAuthenticate = (userData: User) => {
-    // Store user data and redirect to dashboard
-    localStorage.setItem('user', JSON.stringify(userData));
-    router.push('/');
-  };
+  // If user is already authenticated, redirect to dashboard
+  if (user) {
+    return <Redirect to="/" />;
+  }
 
   return (
-    <div className="min-h-screen">
-      <AuthenticationPage onAuthenticate={handleAuthenticate} />
-    </div>
+    <AuthenticationPage 
+      onAuthenticate={(userData) => {
+        const token = localStorage.getItem('token') || '';
+        login(
+          {
+            id: userData.id || 'user-id',
+            name: userData.name,
+            email: userData.email,
+            monthlyBudget: userData.monthlyBudget
+          },
+          token
+        );
+      }} 
+    />
   );
 }
