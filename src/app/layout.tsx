@@ -1,20 +1,12 @@
-// app/layout.tsx
+// src/app/layout.tsx
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
+import { AppErrorBoundary } from '@/components/common/ErrorBoundary';
 
-// Conditional imports for debug components
-const ApiStatusIndicator = process.env.NODE_ENV === 'development' && process.env.DEBUG === 'true' 
-  ? require('@/components/dev/ApiStatusIndicator').default 
-  : null;
-
-const DebugHelper = process.env.NODE_ENV === 'development' && process.env.DEBUG === 'true'
-  ? require('@/components/dev/DebugHelper').default 
-  : null;
-
-// Font configurations using your existing setup
+// Font configurations
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
   variable: "--font-geist-sans",
@@ -68,10 +60,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  const isDebugEnabled = process.env.DEBUG === 'true';
-  const showDebugComponents = isDevelopment && isDebugEnabled;
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -94,61 +82,24 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {/* Skip to main content for accessibility */}
-          <a
-            href="#main-content"
-            className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-blue-600 text-white px-4 py-2 rounded-md z-50 transition-all"
-          >
-            Skip to main content
-          </a>
-          
-          {/* Main application content */}
-          <div id="main-content" className="relative">
-            {children}
-          </div>
-          
-          {/* Toast notifications */}
-          <Toaster />
-          
-          {/* Development and Debug Components */}
-          {showDebugComponents && (
-            <>
-              {ApiStatusIndicator && <ApiStatusIndicator position="bottom-right" />}
-              {DebugHelper && <DebugHelper />}
-            </>
-          )}
-
-          {/* Development-only indicators */}
-          {isDevelopment && !isDebugEnabled && (
-            <div className="fixed bottom-4 left-4 z-50">
-              <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-2 rounded text-xs">
-                <p className="font-semibold">Development Mode</p>
-                <p>Set DEBUG=true to enable debug tools</p>
-              </div>
+          <AppErrorBoundary>
+            {/* Skip to main content for accessibility */}
+            <a
+              href="#main-content"
+              className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-blue-600 text-white px-4 py-2 rounded-md z-50 transition-all"
+            >
+              Skip to main content
+            </a>
+            
+            {/* Main application content */}
+            <div id="main-content" className="relative">
+              {children}
             </div>
-          )}
+            
+            {/* Toast notifications */}
+            <Toaster />
+          </AppErrorBoundary>
         </ThemeProvider>
-
-        {/* Service Worker registration (only in production) */}
-        {process.env.NODE_ENV === 'production' && (
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `
-                if ('serviceWorker' in navigator) {
-                  window.addEventListener('load', function() {
-                    navigator.serviceWorker.register('/sw.js')
-                      .then(function(registration) {
-                        console.log('SW registered: ', registration);
-                      })
-                      .catch(function(registrationError) {
-                        console.log('SW registration failed: ', registrationError);
-                      });
-                  });
-                }
-              `,
-            }}
-          />
-        )}
       </body>
     </html>
   );
