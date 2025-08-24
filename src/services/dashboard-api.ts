@@ -17,6 +17,7 @@ import { dashboardApiFallback } from './dashboard-api-fallback';
 
 // Axios instance with default configuration
 const apiClient = axios.create({
+  baseURL: typeof window !== 'undefined' ? window.location.origin : '',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -28,6 +29,13 @@ apiClient.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+
+      // ADD THIS DEBUG CODE:
+      console.log('🔍 Dashboard API Debug:');
+      console.log('Looking for token key:', STORAGE_KEYS.AUTH_TOKEN);
+      console.log('Token found:', !!token);
+      console.log('Token value:', token?.substring(0, 20) + '...');
+
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -85,10 +93,39 @@ class DashboardApiService {
 
     // Try to reach the health endpoint to see if backend is available
     try {
-      const response = await apiClient.get('/api/health', { timeout: 2000 });
+      console.log('🏥 Testing health check endpoint...');
+      console.log('🏥 Health check URL: /api/health');
+      
+      const response = await apiClient.get('/api/health', { timeout: 5000 });
+      
+      console.log('✅ Health check passed:');
+      console.log('  Status:', response.status);
+      console.log('  Data:', response.data);
+      
       // If health check passes, don't use fallback
       return false;
-    } catch (error) {
+    } catch (error: any) {
+      console.group('❌ Health check failed - detailed error:');
+      console.log('Error type:', error.constructor.name);
+      console.log('Error message:', error.message);
+      console.log('Error code:', error.code);
+      console.log('Has response:', !!error.response);
+      
+      if (error.response) {
+        console.log('Response status:', error.response.status);
+        console.log('Response data:', error.response.data);
+        console.log('Response headers:', error.response.headers);
+      } else {
+        console.log('Network error details:', {
+          code: error.code,
+          errno: error.errno,
+          syscall: error.syscall,
+          hostname: error.hostname,
+          port: error.port
+        });
+      }
+      console.groupEnd();
+      
       // Only use fallback in development when health check fails
       console.warn('⚠️ Backend health check failed in development environment. Will use fallback data for this session.');
       this.useFallback = true;

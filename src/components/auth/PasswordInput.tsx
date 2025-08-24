@@ -2,12 +2,12 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Eye, EyeOff, Lock } from 'lucide-react';
+import { Eye, EyeOff, Lock, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
 import { checkPasswordStrength } from '@/lib/auth-validation';
-import { PasswordStrength } from '@/types/auth';
+import { cn } from '@/lib/utils';
 
 interface PasswordInputProps {
   id: string;
@@ -18,69 +18,11 @@ interface PasswordInputProps {
   error?: string;
   disabled?: boolean;
   placeholder?: string;
+  autoComplete?: string;
+  required?: boolean;
   showStrength?: boolean;
   className?: string;
 }
-
-const PasswordStrengthIndicator: React.FC<{ strength: PasswordStrength }> = ({ 
-  strength 
-}) => {
-  const getStrengthColor = (score: number): string => {
-    if (score <= 1) return 'bg-red-500';
-    if (score <= 2) return 'bg-orange-500';
-    if (score <= 3) return 'bg-yellow-500';
-    if (score <= 4) return 'bg-green-500';
-    return 'bg-green-600';
-  };
-
-  const getStrengthText = (score: number): string => {
-    const levels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
-    return levels[Math.min(score, 4)];
-  };
-
-  return (
-    <div className="mt-2 space-y-2">
-      {/* Strength bar */}
-      <div className="flex space-x-1">
-        {[1, 2, 3, 4, 5].map((level) => (
-          <div
-            key={level}
-            className={cn(
-              'h-1 flex-1 rounded-full transition-colors duration-300',
-              level <= strength.score
-                ? getStrengthColor(strength.score)
-                : 'bg-gray-200'
-            )}
-          />
-        ))}
-      </div>
-      
-      {/* Strength text and feedback */}
-      <div className="space-y-1">
-        <p className={cn(
-          'text-xs font-medium',
-          strength.score <= 1 && 'text-red-600',
-          strength.score === 2 && 'text-orange-600',
-          strength.score === 3 && 'text-yellow-600',
-          strength.score >= 4 && 'text-green-600'
-        )}>
-          Strength: {getStrengthText(strength.score)}
-        </p>
-        
-        {strength.feedback.length > 0 && (
-          <ul className="text-xs text-gray-600 space-y-0.5">
-            {strength.feedback.map((item, index) => (
-              <li key={index} className="flex items-center space-x-1">
-                <span className="w-1 h-1 bg-gray-400 rounded-full" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-};
 
 export const PasswordInput: React.FC<PasswordInputProps> = ({
   id,
@@ -90,24 +32,51 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
   onBlur,
   error,
   disabled = false,
-  placeholder = "Enter your password",
+  placeholder,
+  autoComplete = 'current-password',
+  required = false,
   showStrength = false,
   className,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  
   const passwordStrength = showStrength ? checkPasswordStrength(value) : null;
+
+  const getStrengthColor = (score: number) => {
+    if (score <= 1) return 'bg-red-500';
+    if (score <= 2) return 'bg-orange-500';
+    if (score <= 3) return 'bg-yellow-500';
+    return 'bg-green-500';
+  };
+
+  const getStrengthText = (score: number) => {
+    if (score <= 1) return 'Very Weak';
+    if (score <= 2) return 'Weak';
+    if (score <= 3) return 'Fair';
+    if (score <= 4) return 'Good';
+    return 'Strong';
+  };
 
   return (
     <div className={cn('space-y-2', className)}>
-      <Label htmlFor={id} className="text-sm font-medium text-gray-700">
+      <Label 
+        htmlFor={id} 
+        className={cn(
+          'text-sm font-medium transition-colors',
+          error ? 'text-red-600' : 'text-gray-700',
+          disabled && 'text-gray-400'
+        )}
+      >
         {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
       </Label>
       
       <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Lock className="h-4 w-4 text-gray-400" />
+        <div className="absolute left-3 top-1/2 transform -translate-y-1/2 z-10">
+          <Lock className={cn(
+            'h-4 w-4 transition-colors',
+            error ? 'text-red-500' : 'text-gray-400',
+            disabled && 'text-gray-300'
+          )} />
         </div>
         
         <Input
@@ -115,32 +84,29 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
           type={showPassword ? 'text' : 'password'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => {
-            setIsFocused(false);
-            onBlur?.();
-          }}
-          placeholder={placeholder}
+          onBlur={onBlur}
           disabled={disabled}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
           className={cn(
-            'pl-10 pr-10 transition-all duration-200',
+            'pl-10 pr-12 transition-all duration-200',
             error && 'border-red-500 focus:border-red-500 focus:ring-red-500',
-            isFocused && !error && 'border-blue-500 ring-2 ring-blue-500/20',
-            disabled && 'opacity-50 cursor-not-allowed'
+            disabled && 'cursor-not-allowed opacity-50'
           )}
-          aria-invalid={!!error}
+          aria-invalid={error ? 'true' : 'false'}
           aria-describedby={error ? `${id}-error` : undefined}
         />
         
         <button
           type="button"
           onClick={() => setShowPassword(!showPassword)}
+          disabled={disabled}
           className={cn(
-            'absolute inset-y-0 right-0 pr-3 flex items-center',
+            'absolute right-3 top-1/2 transform -translate-y-1/2',
             'text-gray-400 hover:text-gray-600 transition-colors',
-            disabled && 'pointer-events-none'
+            'focus:outline-none focus:text-gray-600',
+            disabled && 'cursor-not-allowed opacity-50'
           )}
-          tabIndex={-1}
           aria-label={showPassword ? 'Hide password' : 'Show password'}
         >
           {showPassword ? (
@@ -149,19 +115,55 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
             <Eye className="h-4 w-4" />
           )}
         </button>
+        
+        {error && (
+          <div className="absolute right-10 top-1/2 transform -translate-y-1/2">
+            <AlertCircle className="h-4 w-4 text-red-500" />
+          </div>
+        )}
       </div>
-
-      {/* Error message */}
+      
+      {/* Password strength indicator */}
+      {showStrength && value && passwordStrength && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-600">Password strength:</span>
+            <span className={cn(
+              'text-xs font-medium',
+              passwordStrength.score <= 1 ? 'text-red-600' :
+              passwordStrength.score <= 2 ? 'text-orange-600' :
+              passwordStrength.score <= 3 ? 'text-yellow-600' :
+              'text-green-600'
+            )}>
+              {getStrengthText(passwordStrength.score)}
+            </span>
+          </div>
+          <Progress 
+            value={(passwordStrength.score / 4) * 100} 
+            className="h-2"
+            // Note: You might need to add custom styles for colored progress bars
+          />
+          {passwordStrength.feedback.length > 0 && (
+            <div className="space-y-1">
+              {passwordStrength.feedback.map((feedback, index) => (
+                <p key={index} className="text-xs text-gray-500">
+                  {feedback}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      
       {error && (
-        <p id={`${id}-error`} className="text-sm text-red-600 flex items-center space-x-1">
-          <span className="w-1 h-1 bg-red-600 rounded-full" />
+        <p 
+          id={`${id}-error`}
+          className="text-sm text-red-600 flex items-center space-x-1"
+          role="alert"
+        >
+          <AlertCircle className="h-3 w-3 flex-shrink-0" />
           <span>{error}</span>
         </p>
-      )}
-
-      {/* Password strength indicator */}
-      {showStrength && passwordStrength && value.length > 0 && !error && (
-        <PasswordStrengthIndicator strength={passwordStrength} />
       )}
     </div>
   );

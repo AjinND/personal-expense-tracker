@@ -22,8 +22,10 @@ const CSP_POLICY = process.env.NODE_ENV === 'production'
 // Rate limiting configuration
 const RATE_LIMITS = {
   '/api/auth': { requests: 5, window: 15 * 60 * 1000 }, // 5 requests per 15 minutes
-  '/api/expenses': { requests: 60, window: 60 * 1000 }, // 60 requests per minute
-  '/api/budget': { requests: 20, window: 60 * 1000 }, // 20 requests per minute
+  '/api/auth/session': { requests: 5, window: 15 * 60 * 1000 }, // 5 requests per 15 minutes
+  '/api/expenses': { requests: 100, window: 60 * 1000 }, // 100 requests per minute for expenses
+  '/api/budget': { requests: 50, window: 60 * 1000 }, // 50 requests per minute for budget
+  '/api/dashboard': { requests: 100, window: 60 * 1000 }, // 100 requests per minute for dashboard
   default: { requests: 100, window: 60 * 1000 }, // 100 requests per minute
 };
 
@@ -106,7 +108,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Apply rate limiting to API routes
-  if (pathname.startsWith('/api')) {
+  if (pathname.startsWith('/api') && pathname !== '/api/health') {
     const clientId = getClientIdentifier(request);
     
     if (!checkRateLimit(clientId, pathname)) {
