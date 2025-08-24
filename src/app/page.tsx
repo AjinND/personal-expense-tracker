@@ -3,8 +3,8 @@
 
 import React from 'react';
 import { AuthGuard, useAuth } from '@/components/auth/AuthGuard';
-import AuthenticationPage from '@/components/login/login';
 import { Redirect } from '@/components/common/Redirect';
+import { AuthenticationPage } from '@/components/auth/AuthenticationPage';
 
 export default function HomePage() {
   return (
