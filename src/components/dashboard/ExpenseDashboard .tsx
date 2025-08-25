@@ -10,7 +10,6 @@ import { CategoryCards } from './CategoryCards';
 import { DashboardCharts } from './DashboardCharts';
 import { RecentTransactions } from './RecentTransactions';
 import { DashboardLayoutConfig, useDashboardConfig } from './DashboardLayoutConfig';
-import { useDashboard } from '@/hooks/useDashboard';
 import { User } from '@/types/dashboard';
 import { cn } from '@/lib/utils';
 import { 
@@ -19,6 +18,7 @@ import {
   getSpendingInsights,
   sanitizeExpenseData 
 } from '@/lib/dashboard-analytics';
+import { useDashboard } from '@/contexts/DashboardContext';
 
 interface ExpenseDashboardProps {
   user: User;
@@ -54,7 +54,7 @@ export const ExpenseDashboard: React.FC<ExpenseDashboardProps> = ({
     retryOperation,
     dateRange,
     setDateRange,
-  } = useDashboard({ onLogout });
+  } = useDashboard();
 
   // Sanitize expense data to remove any mock/hardcoded values
   const cleanExpenseData = useMemo(() => 

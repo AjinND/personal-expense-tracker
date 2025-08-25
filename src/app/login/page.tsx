@@ -5,6 +5,7 @@ import React from 'react';
 import { AuthGuard, useAuth } from '@/components/auth/AuthGuard';
 import { Redirect } from '@/components/common/Redirect';
 import { AuthenticationPage } from '@/components/auth/AuthenticationPage';
+import { STORAGE_KEYS } from '@/constants/dashboard';
 
 export default function LoginPage() {
   return (
@@ -25,7 +26,7 @@ function LoginContent() {
   return (
     <AuthenticationPage 
       onAuthenticate={(userData) => {
-        const token = localStorage.getItem('token') || '';
+        const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) || '';
         login(
           {
             id: userData.id || 'user-id',

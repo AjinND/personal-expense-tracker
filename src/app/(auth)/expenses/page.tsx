@@ -4,7 +4,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/components/auth/AuthGuard';
 import { CategoryCards } from '@/components/dashboard/CategoryCards';
-import { useDashboard } from '@/hooks/useDashboard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -32,6 +31,7 @@ import { ExpenseCategory } from '@/types/dashboard';
 import { CATEGORY_COLORS, CATEGORY_NAMES } from '@/constants/dashboard';
 import { formatCurrency } from '@/lib/dashboard-utils';
 import { RecentTransactions } from '@/components/dashboard/RecentTransactions';
+import { useDashboard } from '@/contexts/DashboardContext';
 
 export default function ExpensesPage() {
   const { user, logout } = useAuth();
@@ -45,7 +45,7 @@ export default function ExpensesPage() {
     metrics,
     addExpense,
     refreshing,
-  } = useDashboard({ onLogout: logout });
+  } = useDashboard();
 
   if (!user) return null;
 

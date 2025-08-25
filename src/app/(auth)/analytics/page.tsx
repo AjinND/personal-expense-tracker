@@ -6,21 +6,13 @@ import { useAuth } from '@/components/auth/AuthGuard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { 
   TrendingUp, 
   TrendingDown, 
-  BarChart3, 
-  PieChart, 
   Calendar,
   Download,
-  Filter,
   Target,
-  DollarSign,
-  ShoppingBag,
-  Plane,
-  Utensils,
-  Music
+  DollarSign
 } from 'lucide-react';
 import {
   LineChart,
@@ -48,8 +40,8 @@ import {
 } from '@/components/ui/select';
 import { formatCurrency } from '@/lib/dashboard-utils';
 import { cn } from '@/lib/utils';
-import { useDashboard } from '@/hooks/useDashboard';
 import { CATEGORY_COLORS } from '@/constants/dashboard';
+import { useDashboard } from '@/contexts/DashboardContext';
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
@@ -62,7 +54,7 @@ export default function AnalyticsPage() {
     metrics,
     totalBalance,
     refreshing,
-  } = useDashboard({ onLogout: () => {} });
+  } = useDashboard();
 
   if (!user) return null;
 

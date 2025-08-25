@@ -14,30 +14,128 @@ import {
   STORAGE_KEYS,
 } from '@/constants/dashboard';
 import { dashboardApiFallback } from './dashboard-api-fallback';
+import { debug } from '@/utils/debug-client'; // Import centralized debug
+
+// Retry configuration
+const RETRY_CONFIG = {
+  maxRetries: 2,
+  retryDelay: 1000,
+  retryableStatuses: [408, 429, 500, 502, 503, 504],
+};
+
+// Request queue for handling rate limits
+interface QueuedRequest {
+  resolve: (value: any) => void;
+  reject: (error: any) => void;
+  config: any;
+  retryCount: number;
+}
+
+class RequestQueue {
+  private queue: QueuedRequest[] = [];
+  private processing = false;
+  private rateLimitedUntil = 0;
+
+  async enqueue(config: any, retryCount = 0): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ resolve, reject, config, retryCount });
+      this.processQueue();
+    });
+  }
+
+  private async processQueue() {
+    if (this.processing || this.queue.length === 0) {
+      return;
+    }
+
+    // Check if we're still rate limited
+    if (Date.now() < this.rateLimitedUntil) {
+      setTimeout(() => this.processQueue(), this.rateLimitedUntil - Date.now());
+      return;
+    }
+
+    this.processing = true;
+
+    while (this.queue.length > 0) {
+      const request = this.queue.shift()!;
+
+      try {
+        const response = await axios(request.config);
+        request.resolve(response);
+      } catch (error: any) {
+        if (error.response?.status === 429) {
+          // Rate limited - wait and retry
+          const retryAfter = error.response.headers['retry-after'];
+          const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 60000; // Default 1 minute
+          this.rateLimitedUntil = Date.now() + waitTime;
+
+          if (request.retryCount < RETRY_CONFIG.maxRetries) {
+            this.queue.unshift({ ...request, retryCount: request.retryCount + 1 });
+          } else {
+            request.reject(error);
+          }
+          break;
+        } else {
+          request.reject(error);
+        }
+      }
+    }
+
+    this.processing = false;
+
+    // Continue processing if there are more items
+    if (this.queue.length > 0) {
+      setTimeout(() => this.processQueue(), 100);
+    }
+  }
+}
+
+const requestQueue = new RequestQueue();
 
 // Axios instance with default configuration
 const apiClient = axios.create({
   baseURL: typeof window !== 'undefined' ? window.location.origin : '',
-  timeout: 10000,
+  timeout: 15000, // Increased timeout
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
+// Helper function to get fresh token
+const getAuthToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+};
+
+// Helper function to check if token exists and is valid format
+const isValidToken = (token: string | null): boolean => {
+  if (!token) return false;
+  // Basic JWT format check (should have 3 parts separated by dots)
+  const parts = token.split('.');
+  return parts.length === 3;
+};
+
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      const token = getAuthToken();
 
-      // ADD THIS DEBUG CODE:
-      console.log('🔍 Dashboard API Debug:');
-      console.log('Looking for token key:', STORAGE_KEYS.AUTH_TOKEN);
-      console.log('Token found:', !!token);
-      console.log('Token value:', token?.substring(0, 20) + '...');
+      // Debug logging (keep your existing debug code)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 Dashboard API Debug:');
+        console.log('Looking for token key:', STORAGE_KEYS.AUTH_TOKEN);
+        console.log('Token found:', !!token);
+        console.log('Token value:', token?.substring(0, 20) + '...');
+      }
 
-      if (token) {
+      if (isValidToken(token)) {
         config.headers.Authorization = `Bearer ${token}`;
+      } else if (token) {
+        // Token exists but is invalid format - clear it
+        localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+        localStorage.removeItem('user');
+        console.warn('Invalid token format detected and cleared');
       }
     }
     return config;
@@ -45,21 +143,163 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor for error handling
+// Response interceptor for error handling with retry logic
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
+    const originalRequest = error.config as any;
+
     if (error.response?.status === 401) {
-      // Clear token and redirect to login
+      // Clear token and redirect to login - but avoid infinite redirects
       if (typeof window !== 'undefined') {
         localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-        window.location.href = '/';
+        localStorage.removeItem('user');
+
+        // Only redirect if not already on login/auth pages
+        const currentPath = window.location.pathname;
+        if (!currentPath.includes('/login') && !currentPath.includes('/register')) {
+          window.location.href = '/login';
+        }
+      }
+      throw new DashboardError(ERROR_MESSAGES.SESSION_EXPIRED, 'SESSION_EXPIRED', 401);
+    }
+
+    if (error.response?.status === 429) {
+      // Rate limited - use queue for retry
+      if (!originalRequest._queued) {
+        originalRequest._queued = true;
+        try {
+          return await requestQueue.enqueue(originalRequest);
+        } catch (queueError) {
+          throw new DashboardError('Too many requests. Please try again later.', 'RATE_LIMIT', 429);
+        }
+      }
+      throw new DashboardError('Too many requests. Please try again later.', 'RATE_LIMIT', 429);
+    }
+
+    // Retry logic for certain errors
+    if (RETRY_CONFIG.retryableStatuses.includes(error.response?.status || 0)) {
+      const retryCount = originalRequest.__retryCount || 0;
+
+      if (retryCount < RETRY_CONFIG.maxRetries) {
+        originalRequest.__retryCount = retryCount + 1;
+
+        // Exponential backoff
+        const delay = RETRY_CONFIG.retryDelay * Math.pow(2, retryCount);
+        await new Promise(resolve => setTimeout(resolve, delay));
+
+        return apiClient(originalRequest);
+      }
+    }
+
+    if (!error.response) {
+      throw new DashboardError(ERROR_MESSAGES.NETWORK_ERROR, 'NETWORK_ERROR');
+    }
+
+    const errorData = error.response.data as { error?: string; code?: string };
+    throw new DashboardError(
+      errorData.error || ERROR_MESSAGES.SERVER_ERROR,
+      errorData.code || 'API_ERROR',
+      error.response.status
+    );
+  }
+);
+
+// Request interceptor with centralized debug
+apiClient.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      const token = getAuthToken();
+
+      // Centralized debug logging
+      debug.api('API Request', {
+        method: config.method?.toUpperCase(),
+        url: config.url,
+        hasToken: !!token,
+        tokenPreview: token ? `${token.substring(0, 20)}...` : 'None'
+      });
+
+      if (isValidToken(token)) {
+        config.headers.Authorization = `Bearer ${token}`;
+      } else if (token) {
+        localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+        localStorage.removeItem('user');
+        debug.auth('Invalid token format detected and cleared', { tokenPreview: token.substring(0, 20) + '...' });
+      }
+    }
+    return config;
+  },
+  (error) => {
+    debug.apiError('Request interceptor error', error);
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor with centralized debug
+apiClient.interceptors.response.use(
+  (response) => {
+    debug.api('API Response Success', {
+      status: response.status,
+      url: response.config.url,
+      data: response.data
+    });
+    return response;
+  },
+  async (error: AxiosError) => {
+    const originalRequest = error.config as any;
+    
+    debug.apiError('API Response Error', {
+      status: error.response?.status,
+      url: error.config?.url,
+      message: error.message,
+      data: error.response?.data
+    });
+    
+    if (error.response?.status === 401) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+        localStorage.removeItem('user');
+        
+        const currentPath = window.location.pathname;
+        if (!currentPath.includes('/login') && !currentPath.includes('/register')) {
+          debug.auth('Session expired, redirecting to login', { currentPath });
+          window.location.href = '/login';
+        }
       }
       throw new DashboardError(ERROR_MESSAGES.SESSION_EXPIRED, 'SESSION_EXPIRED', 401);
     }
     
     if (error.response?.status === 429) {
+      if (!originalRequest._queued) {
+        originalRequest._queued = true;
+        debug.api('Request queued due to rate limit', { url: originalRequest.url });
+        try {
+          return await requestQueue.enqueue(originalRequest);
+        } catch (queueError) {
+          debug.apiError('Request queue failed', queueError);
+          throw new DashboardError('Too many requests. Please try again later.', 'RATE_LIMIT', 429);
+        }
+      }
       throw new DashboardError('Too many requests. Please try again later.', 'RATE_LIMIT', 429);
+    }
+    
+    // Retry logic for certain errors
+    if (RETRY_CONFIG.retryableStatuses.includes(error.response?.status || 0)) {
+      const retryCount = originalRequest.__retryCount || 0;
+      
+      if (retryCount < RETRY_CONFIG.maxRetries) {
+        originalRequest.__retryCount = retryCount + 1;
+        
+        const delay = RETRY_CONFIG.retryDelay * Math.pow(2, retryCount);
+        debug.api(`Retrying request (${retryCount + 1}/${RETRY_CONFIG.maxRetries})`, {
+          url: originalRequest.url,
+          delay,
+          status: error.response?.status
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return apiClient(originalRequest);
+      }
     }
     
     if (!error.response) {
@@ -75,237 +315,131 @@ apiClient.interceptors.response.use(
   }
 );
 
+
 class DashboardApiService {
   private useFallback = false;
   private isDevelopment = process.env.NODE_ENV === 'development';
+  private lastHealthCheck = 0;
+  private healthCheckInterval = 30000; // Check every 30 seconds
+  private failureCount = 0; // Track consecutive failures
+  private maxFailures = 3; // Max failures before using fallback
 
-  // Check if we should use fallback - only in development and only after a real error
+  // Improved fallback decision logic with centralized debug
   private async shouldUseFallback(): Promise<boolean> {
-    // Never use fallback in production
     if (!this.isDevelopment) {
       return false;
     }
 
-    // If we've already determined to use fallback, continue using it
-    if (this.useFallback) {
-      return true;
+    if (!this.useFallback) {
+      return false;
     }
 
-    // Try to reach the health endpoint to see if backend is available
-    try {
-      console.log('🏥 Testing health check endpoint...');
-      console.log('🏥 Health check URL: /api/health');
-      
-      const response = await apiClient.get('/api/health', { timeout: 5000 });
-      
-      console.log('✅ Health check passed:');
-      console.log('  Status:', response.status);
-      console.log('  Data:', response.data);
-      
-      // If health check passes, don't use fallback
-      return false;
-    } catch (error: any) {
-      console.group('❌ Health check failed - detailed error:');
-      console.log('Error type:', error.constructor.name);
-      console.log('Error message:', error.message);
-      console.log('Error code:', error.code);
-      console.log('Has response:', !!error.response);
-      
-      if (error.response) {
-        console.log('Response status:', error.response.status);
-        console.log('Response data:', error.response.data);
-        console.log('Response headers:', error.response.headers);
-      } else {
-        console.log('Network error details:', {
-          code: error.code,
-          errno: error.errno,
-          syscall: error.syscall,
-          hostname: error.hostname,
-          port: error.port
-        });
+    const now = Date.now();
+    if (now - this.lastHealthCheck > this.healthCheckInterval) {
+      debug.api('Testing if API is back online...');
+      if (await this.testConnection()) {
+        debug.api('API is back online! Disabling fallback mode.');
+        this.useFallback = false;
+        this.failureCount = 0;
+        return false;
       }
-      console.groupEnd();
-      
-      // Only use fallback in development when health check fails
-      console.warn('⚠️ Backend health check failed in development environment. Will use fallback data for this session.');
-      this.useFallback = true;
-      return true;
+      this.lastHealthCheck = now;
     }
+
+    return true;
   }
 
   // Helper method to handle errors appropriately based on environment
   private async handleApiError(error: any, operation: string, fallbackMethod?: () => Promise<any>): Promise<any> {
-  const isDev = this.isDevelopment;
-  
-  // Always log the error details in development
-  if (isDev) {
-    console.group(`🚨 API Error in ${operation}:`);
-    console.error('Error details:', error);
-    console.error('Error message:', error.message);
-    console.error('Error response:', error.response?.data);
-    console.error('Error status:', error.response?.status);
-    console.groupEnd();
-  }
+    debug.apiError(`Error in ${operation}`, {
+      status: error.response?.status,
+      message: error.message,
+      isInfrastructureError: this.isInfrastructureError(error)
+    });
 
-  // Determine if this is an infrastructure error vs application error
-  const isInfrastructureError = this.isInfrastructureError(error);
-  
-  // In production, never use fallback - always throw the error
-  if (!isDev) {
+    // In production, never use fallback
+    if (!this.isDevelopment) {
+      throw error;
+    }
+
+    // Handle specific error types
+    if (error.response?.status === 401) {
+      debug.authWarn('Authentication required');
+      throw error;
+    }
+
+    if (error.response?.status === 403) {
+      debug.authWarn('Access forbidden');
+      throw error;
+    }
+
+    if (error.response?.status === 400) {
+      debug.apiError('Bad request - invalid data format');
+      throw error;
+    }
+
+    if (error.response?.status === 429) {
+      debug.apiError('Rate limit exceeded');
+      throw error;
+    }
+
+    const isInfrastructureError = this.isInfrastructureError(error);
+    
+    if (isInfrastructureError) {
+      this.failureCount++;
+      debug.fallback(`Infrastructure error #${this.failureCount} in ${operation}`);
+      
+      if (this.failureCount >= this.maxFailures && fallbackMethod) {
+        debug.fallback(`Switching to fallback mode after ${this.failureCount} failures`);
+        this.useFallback = true;
+        this.lastHealthCheck = Date.now();
+        return await fallbackMethod();
+      } else if (fallbackMethod) {
+        debug.fallback(`Using one-time fallback for ${operation} (${this.failureCount}/${this.maxFailures})`);
+        return await fallbackMethod();
+      }
+    }
+
+    if (error.response?.status < 500) {
+      this.failureCount = 0;
+    }
+
     throw error;
   }
-
-  // Handle specific error types with helpful messages
-  if (error.response?.status === 401) {
-    console.error('❌ Authentication required. Please log in.');
-    throw error;
-  }
-
-  if (error.response?.status === 403) {
-    console.error('❌ Access forbidden. Check your permissions.');
-    throw error;
-  }
-
-  if (error.response?.status === 400) {
-    console.error('❌ Bad request. Check your data format and parameters.');
-    console.error('💡 This usually means invalid data was sent to the API.');
-    throw error;
-  }
-
-  if (error.response?.status === 429) {
-    console.error('❌ Rate limit exceeded. Please wait before trying again.');
-    throw error;
-  }
-
-  // In development, only use fallback for infrastructure errors
-  if (isInfrastructureError && fallbackMethod) {
-    console.warn(`⚠️ Infrastructure error detected. Using fallback data for ${operation} in development`);
-    console.warn(`🔧 This is likely due to: backend not running, network issues, or server problems`);
-    return await fallbackMethod();
-  }
-
-  // For all other errors, throw immediately
-  console.error(`❌ Application error in ${operation}. Not using fallback data.`);
-  throw error;
-}
 
   // Determine if an error is infrastructure-related (should use fallback) vs application-related (should not)
   private isInfrastructureError(error: any): boolean {
-  // Log details for debugging
-  console.log('🔍 Error analysis:', {
-    hasResponse: !!error.response,
-    status: error.response?.status,
-    message: error.message,
-    code: error.code,
-    name: error.name
-  });
+    if (!error.response) {
+      debug.api('Network error detected');
+      return true;
+    }
 
-  // Network errors (backend not reachable) - these are infrastructure issues
-  if (!error.response) {
-    console.log('📡 No response received - treating as network/infrastructure error');
-    return true;
-  }
+    if (error.response?.status >= 500) {
+      debug.api('Server error detected');
+      return true;
+    }
 
-  // Authentication errors should NEVER use fallback - they need proper auth
-  if (error.response?.status === 401 || error.response?.status === 403) {
-    console.log('🔐 Authentication/Authorization error - NOT using fallback');
+    const infrastructureStatusCodes = [408, 502, 503, 504];
+    if (infrastructureStatusCodes.includes(error.response?.status)) {
+      debug.api('Infrastructure status code detected', { status: error.response.status });
+      return true;
+    }
+
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      debug.api('Timeout error detected');
+      return true;
+    }
+
+    if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error')) {
+      debug.api('Connection error detected');
+      return true;
+    }
+
     return false;
   }
 
-  // Validation errors should NOT use fallback - they indicate API usage issues  
-  if (error.response?.status === 400) {
-    console.log('📝 Validation error - NOT using fallback');
-    return false;
-  }
-
-  // Rate limiting should NOT use fallback - it's a legitimate API response
-  if (error.response?.status === 429) {
-    console.log('⏰ Rate limit error - NOT using fallback');
-    return false;
-  }
-
-  // Server errors (500+ range) - backend issues
-  if (error.response?.status >= 500) {
-    console.log('🔥 Server error (500+) - treating as infrastructure error');
-    return true;
-  }
-
-  // Specific infrastructure-related status codes
-  const infrastructureStatusCodes = [
-    502, // Bad Gateway
-    503, // Service Unavailable  
-    504, // Gateway Timeout
-    408, // Request Timeout
-  ];
-
-  if (infrastructureStatusCodes.includes(error.response?.status)) {
-    console.log('⚠️ Infrastructure status code - treating as infrastructure error');
-    return true;
-  }
-
-  // Check for specific error patterns that indicate infrastructure issues
-  if (error.message?.includes('Network Error') || 
-      error.message?.includes('timeout') ||
-      error.message?.includes('ECONNREFUSED') ||
-      error.code === 'NETWORK_ERROR') {
-    console.log('🌐 Network-related error message - treating as infrastructure error');
-    return true;
-  }
-
-  // Any other 400-499 errors are application errors - don't use fallback
-  if (error.response?.status >= 400 && error.response?.status < 500) {
-    console.log('🚫 Client error - treating as application error');
-    return false;
-  }
-
-  // If we can't determine, be conservative and don't use fallback
-  console.log('❓ Unclear error type - NOT using fallback to be safe');
-  return false;
-}
-
-  // Expenses API
-  // async getExpenses(): Promise<ExpenseEntry[]> {
-  //   try {
-  //     if (await this.shouldUseFallback()) {
-  //       return await dashboardApiFallback.getExpenses();
-  //     }
-
-  //     const response: AxiosResponse<{
-  //       success: boolean;
-  //       data?: ExpenseEntry[];
-  //       error?: string;
-  //     }> = await apiClient.get(API_ENDPOINTS.EXPENSES);
-      
-  //     if (!response.data.success) {
-  //       throw new DashboardError(
-  //         response.data.error || ERROR_MESSAGES.DATA_FETCH_FAILED,
-  //         'API_ERROR'
-  //       );
-  //     }
-      
-  //     // Transform backend data to frontend format
-  //     const expenses = response.data.data || [];
-  //     return expenses.map(expense => ({
-  //       _id: expense._id,
-  //       date: expense.date,
-  //       food: expense.food,
-  //       shopping: expense.shopping,
-  //       travelling: expense.travelling,
-  //       entertainment: expense.entertainment,
-  //       user: expense.user,
-  //       createdAt: expense.createdAt,
-  //       updatedAt: expense.updatedAt
-  //     }));
-  //   } catch (error) {
-  //     return await this.handleApiError(
-  //       error, 
-  //       'getExpenses', 
-  //       () => dashboardApiFallback.getExpenses()
-  //     );
-  //   }
-  // }
-
-    async getExpenses(options?: {
+  // Expenses API with centralized debug
+  async getExpenses(options?: {
     startDate?: string;
     endDate?: string; 
     category?: string;
@@ -314,14 +448,22 @@ class DashboardApiService {
     sortBy?: string;
     sortOrder?: string;
   }): Promise<ExpenseEntry[]> {
+    const startTime = performance.now();
+    
     try {
       if (await this.shouldUseFallback()) {
-        return await dashboardApiFallback.getExpenses();
+        debug.fallback('Using fallback for getExpenses');
+        const result = await dashboardApiFallback.getExpenses();
+        debug.perf('getExpenses_fallback', 'Fallback expenses fetch completed', {
+          duration: performance.now() - startTime,
+          count: result.length
+        });
+        return result;
       }
 
-      // Build query parameters properly
-      const searchParams = new URLSearchParams();
+      debug.api('Fetching expenses from API', options);
       
+      const searchParams = new URLSearchParams();
       if (options?.startDate) searchParams.append('startDate', options.startDate);
       if (options?.endDate) searchParams.append('endDate', options.endDate);
       if (options?.category) searchParams.append('category', options.category);
@@ -346,8 +488,14 @@ class DashboardApiService {
         );
       }
       
-      // Transform backend data to frontend format
       const expenses = response.data.data || [];
+      debug.api('Successfully fetched expenses', { count: expenses.length });
+      debug.perf('getExpenses', 'API expenses fetch completed', {
+        duration: performance.now() - startTime,
+        count: expenses.length
+      });
+      
+      this.failureCount = 0;
       return expenses.map(expense => ({
         _id: expense._id,
         date: expense.date,
@@ -360,6 +508,9 @@ class DashboardApiService {
         updatedAt: expense.updatedAt
       }));
     } catch (error) {
+      debug.perf('getExpenses_error', 'Expenses fetch failed', {
+        duration: performance.now() - startTime
+      });
       return await this.handleApiError(
         error, 
         'getExpenses', 
@@ -367,7 +518,6 @@ class DashboardApiService {
       );
     }
   }
-
   async addExpense(
     category: ExpenseCategory,
     amount: number,
@@ -379,25 +529,25 @@ class DashboardApiService {
       }
 
       const requestData = { category, amount, date };
-      
+
       const response: AxiosResponse<{
         success: boolean;
         data?: any;
         error?: string;
       }> = await apiClient.post(API_ENDPOINTS.EXPENSES, requestData);
-      
+
       if (!response.data.success) {
         throw new DashboardError(
           response.data.error || ERROR_MESSAGES.EXPENSE_ADD_FAILED,
           'API_ERROR'
         );
       }
-      
+
       const expenseData = response.data.data;
       if (!expenseData) {
         throw new DashboardError('No expense data returned', 'INVALID_RESPONSE');
       }
-      
+
       // Transform backend response to frontend format
       return {
         _id: expenseData.id,
@@ -418,7 +568,6 @@ class DashboardApiService {
       );
     }
   }
-
   async updateExpense(
     expenseId: string,
     updates: Partial<Pick<ExpenseEntry, 'food' | 'shopping' | 'travelling' | 'entertainment'>>
@@ -433,18 +582,18 @@ class DashboardApiService {
         data?: any;
         error?: string;
       }> = await apiClient.put(API_ENDPOINTS.EXPENSES, { expenseId, updates });
-      
+
       if (!response.data.success) {
         throw new DashboardError(
           response.data.error || 'Failed to update expense',
           'API_ERROR'
         );
       }
-      
+
       if (!response.data.data) {
         throw new DashboardError('No expense data returned', 'INVALID_RESPONSE');
       }
-      
+
       const expenseData = response.data.data;
       return {
         _id: expenseData.id,
@@ -465,7 +614,6 @@ class DashboardApiService {
       );
     }
   }
-
   async deleteExpense(expenseId: string): Promise<void> {
     try {
       if (await this.shouldUseFallback()) {
@@ -476,7 +624,7 @@ class DashboardApiService {
         success: boolean;
         error?: string;
       }> = await apiClient.delete(`${API_ENDPOINTS.EXPENSES}?id=${expenseId}`);
-      
+
       if (!response.data.success) {
         throw new DashboardError(
           response.data.error || 'Failed to delete expense',
@@ -491,14 +639,22 @@ class DashboardApiService {
       );
     }
   }
-
-  // Budget API
+  // Budget API methods with centralized debug
   async getMonthlyBudget(): Promise<number> {
+    const startTime = performance.now();
+    
     try {
       if (await this.shouldUseFallback()) {
-        return await dashboardApiFallback.getMonthlyBudget();
+        debug.fallback('Using fallback for getMonthlyBudget');
+        const result = await dashboardApiFallback.getMonthlyBudget();
+        debug.perf('getMonthlyBudget_fallback', 'Fallback budget fetch completed', {
+          duration: performance.now() - startTime,
+          result
+        });
+        return result;
       }
 
+      debug.api('Fetching monthly budget from API');
       const response: AxiosResponse<{
         success: boolean;
         data?: { monthlyBudget: number };
@@ -512,8 +668,19 @@ class DashboardApiService {
         );
       }
       
-      return response.data.data?.monthlyBudget || 0;
+      const budget = response.data.data?.monthlyBudget || 0;
+      debug.api('Successfully fetched budget', { budget });
+      debug.perf('getMonthlyBudget', 'API budget fetch completed', {
+        duration: performance.now() - startTime,
+        budget
+      });
+      
+      this.failureCount = 0;
+      return budget;
     } catch (error) {
+      debug.perf('getMonthlyBudget_error', 'Budget fetch failed', {
+        duration: performance.now() - startTime
+      });
       return await this.handleApiError(
         error,
         'getMonthlyBudget',
@@ -521,13 +688,22 @@ class DashboardApiService {
       );
     }
   }
-
   async updateMonthlyBudget(budget: number): Promise<number> {
+    const startTime = performance.now();
+    
     try {
       if (await this.shouldUseFallback()) {
-        return await dashboardApiFallback.updateMonthlyBudget(budget);
+        debug.fallback('Using fallback for updateMonthlyBudget');
+        const result = await dashboardApiFallback.updateMonthlyBudget(budget);
+        debug.perf('updateMonthlyBudget_fallback', 'Fallback budget update completed', {
+          duration: performance.now() - startTime,
+          oldBudget: budget,
+          newBudget: result
+        });
+        return result;
       }
 
+      debug.api('Updating monthly budget', { newBudget: budget });
       const requestData: BudgetUpdateRequest = { parsedBudget: budget };
       
       const response: AxiosResponse<{
@@ -543,8 +719,19 @@ class DashboardApiService {
         );
       }
       
-      return response.data.data?.budget || budget;
+      const updatedBudget = response.data.data?.budget || budget;
+      debug.api('Successfully updated budget', { updatedBudget });
+      debug.perf('updateMonthlyBudget', 'API budget update completed', {
+        duration: performance.now() - startTime,
+        updatedBudget
+      });
+      
+      this.failureCount = 0;
+      return updatedBudget;
     } catch (error) {
+      debug.perf('updateMonthlyBudget_error', 'Budget update failed', {
+        duration: performance.now() - startTime
+      });
       return await this.handleApiError(
         error,
         'updateMonthlyBudget',
@@ -552,7 +739,6 @@ class DashboardApiService {
       );
     }
   }
-
   // Session validation
   async validateSession(): Promise<{ valid: boolean; user?: any }> {
     try {
@@ -565,14 +751,14 @@ class DashboardApiService {
         userData?: any;
         error?: string;
       }> = await apiClient.post(API_ENDPOINTS.AUTH_SESSION);
-      
+
       if (response.data.success) {
         return {
           valid: true,
           user: response.data.userData,
         };
       }
-      
+
       return { valid: false };
     } catch (error) {
       return await this.handleApiError(
@@ -590,10 +776,10 @@ class DashboardApiService {
         return await dashboardApiFallback.batchAddExpenses(expenses);
       }
 
-      const promises = expenses.map(expense => 
+      const promises = expenses.map(expense =>
         this.addExpense(expense.category, expense.amount, expense.date)
       );
-      
+
       return Promise.all(promises);
     } catch (error) {
       return await this.handleApiError(
@@ -613,8 +799,20 @@ class DashboardApiService {
       // For health check, don't use fallback, just return false
       if (this.isDevelopment) {
         const message = error instanceof Error ? error.message : String(error);
-        console.warn('Health check failed:', message);
+        debug.apiError('Health check failed:', message);
       }
+      return false;
+    }
+  }
+
+  // Test API connectivity
+  async testConnection(): Promise<boolean> {
+    try {
+      const response = await axios.get('/api/health', { timeout: 5000 });
+      debug.api('Health check passed', { status: response.status });
+      return response.status === 200;
+    } catch (error) {
+      debug.apiError('Health check failed', error);
       return false;
     }
   }
@@ -623,7 +821,7 @@ class DashboardApiService {
   resetFallbackMode(): void {
     this.useFallback = false;
     if (this.isDevelopment) {
-      console.log('🔄 Fallback mode reset. Will attempt to use real API again.');
+      debug.api('🔄 Fallback mode reset. Will attempt to use real API again.');
     }
   }
 
@@ -650,4 +848,5 @@ export const {
   validateSession,
   batchAddExpenses,
   healthCheck,
+  testConnection,
 } = dashboardApi;

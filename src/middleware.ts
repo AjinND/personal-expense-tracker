@@ -22,11 +22,11 @@ const CSP_POLICY = process.env.NODE_ENV === 'production'
 // Rate limiting configuration
 const RATE_LIMITS = {
   '/api/auth': { requests: 5, window: 15 * 60 * 1000 }, // 5 requests per 15 minutes
-  '/api/auth/session': { requests: 5, window: 15 * 60 * 1000 }, // 5 requests per 15 minutes
-  '/api/expenses': { requests: 100, window: 60 * 1000 }, // 100 requests per minute for expenses
-  '/api/budget': { requests: 50, window: 60 * 1000 }, // 50 requests per minute for budget
-  '/api/dashboard': { requests: 100, window: 60 * 1000 }, // 100 requests per minute for dashboard
-  default: { requests: 100, window: 60 * 1000 }, // 100 requests per minute
+  '/api/auth/session': { requests: 20, window: 15 * 60 * 1000 }, // Increased to 20 for session checks
+  '/api/expenses': { requests: 200, window: 60 * 1000 }, // Increased to 200 requests per minute
+  '/api/budget': { requests: 100, window: 60 * 1000 }, // Increased to 100 requests per minute
+  '/api/dashboard': { requests: 200, window: 60 * 1000 }, // Increased to 200 requests per minute
+  default: { requests: 200, window: 60 * 1000 }, // Increased default limit
 };
 
 // Simple in-memory rate limiting (use Redis in production)

@@ -9,13 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Settings as SettingsIcon, Palette, Globe, Database } from 'lucide-react';
 import { User } from '@/types/dashboard';
+import { STORAGE_KEYS } from '@/constants/dashboard';
 
 export default function SettingsPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
     const userData = localStorage.getItem('user');
     
     if (!token || !userData) {

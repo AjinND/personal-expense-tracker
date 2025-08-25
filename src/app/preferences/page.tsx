@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Sliders, Bell, Shield, Zap } from 'lucide-react';
 import { User } from '@/types/dashboard';
 import { Switch } from '@/components/ui/switch';
+import { STORAGE_KEYS } from '@/constants/dashboard';
 
 export default function PreferencesPage() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function PreferencesPage() {
   });
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
     const userData = localStorage.getItem('user');
     
     if (!token || !userData) {

@@ -4,9 +4,10 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { AuthHeader } from './AuthHeader';
 import { AuthForm } from './AuthForm';
 import { AuthFormData, AuthResponse, AuthMode, User } from '@/types/auth';
+import { STORAGE_KEYS } from '@/constants/dashboard';
+import { AuthHeader } from './AuthHeader';
 
 interface AuthenticationPageProps {
   onAuthenticate: (userData: User) => void;
@@ -42,7 +43,7 @@ export const AuthenticationPage: React.FC<AuthenticationPageProps> = ({
 
       if (data.success) {
         // Save token to localStorage
-        localStorage.setItem('token', data.token);
+        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.token);
         
         // Show success message
         toast({
@@ -108,7 +109,7 @@ export const AuthenticationPage: React.FC<AuthenticationPageProps> = ({
         <Card className="shadow-2xl border-0 bg-white/95 backdrop-blur-sm">
           <CardContent className="p-8">
             {/* Header */}
-            <AuthHeader mode={mode} className="mb-8" />
+            <AuthHeader mode={mode} onModeChange={handleModeChange} className="mb-8" />
 
             {/* Form */}
             <AuthForm

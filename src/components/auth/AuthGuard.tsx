@@ -1,10 +1,11 @@
 // src/components/auth/AuthGuard.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import axios from 'axios';
 import { Loader2 } from 'lucide-react';
+import { STORAGE_KEYS } from '@/constants/dashboard';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -25,6 +26,7 @@ interface AuthContextType {
   login: (userData: AuthUser, token: string) => void;
   logout: () => void;
   updateUser: (userData: Partial<AuthUser>) => void;
+  refreshSession: () => Promise<void>;
 }
 
 // Create Auth Context
@@ -35,6 +37,7 @@ export const AuthContext = React.createContext<AuthContextType>({
   login: () => {},
   logout: () => {},
   updateUser: () => {},
+  refreshSession: async () => {},
 });
 
 // Custom hook to use auth context
@@ -55,77 +58,116 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
+  
+  // Refs to prevent multiple concurrent requests and handle cleanup
+  const sessionValidationRef = useRef<Promise<void> | null>(null);
+  const isComponentMountedRef = useRef(true);
+  const lastValidationTimeRef = useRef<number>(0);
+  
   // Public routes that don't require authentication
   const publicRoutes = ['/login', '/register', '/forgot-password'];
   const isPublicRoute = publicRoutes.includes(pathname);
-
-  useEffect(() => {
-    validateSession();
-  }, []);
-
-  const validateSession = async () => {
-    const token = localStorage.getItem('token');
+  
+  // Session validation with debouncing and error handling
+  const validateSession = useCallback(async (forceRefresh = false) => {
+    // Prevent multiple concurrent validation requests
+    if (sessionValidationRef.current && !forceRefresh) {
+      return sessionValidationRef.current;
+    }
     
-    if (!token) {
-      setLoading(false);
-      if (requireAuth && !isPublicRoute) {
-        router.push('/login');
-      }
+    // Debounce rapid session validations (prevent within 30 seconds unless forced)
+    const now = Date.now();
+    if (!forceRefresh && (now - lastValidationTimeRef.current) < 30000) {
       return;
     }
-
-    try {
-      const response = await axios.post(
-        '/api/auth/session',
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          timeout: 10000,
+    
+    const validationPromise = (async () => {
+      if (!isComponentMountedRef.current) return;
+      
+      const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      
+      if (!token) {
+        if (isComponentMountedRef.current) {
+          setLoading(false);
+          if (requireAuth && !isPublicRoute) {
+            router.push('/login');
+          }
         }
-      );
-
-      if (response.data.success) {
-        const userData = response.data.userData;
-        const authUser: AuthUser = {
-          id: userData.id || userData._id || 'user-id',
-          name: userData.name || 'User',
-          email: userData.email || 'user@example.com',
-          monthlyBudget: userData.monthlyBudget || 0,
-        };
-        
-        setUser(authUser);
-        setError(null);
-        
-        // Redirect to dashboard if on login page
-        if (isPublicRoute) {
-          router.push('/');
-        }
-      } else {
-        handleAuthError(response.data.error || 'Session validation failed');
+        return;
       }
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.code === 'ECONNABORTED') {
-          setError('Connection timeout. Please check your internet connection.');
-        } else if (error.response?.status === 401) {
-          handleAuthError('Session expired. Please login again.');
-        } else if (error.response?.status >= 500) {
-          setError('Server error. Please try again later.');
+
+      try {
+        const response = await axios.post(
+          '/api/auth/session',
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            timeout: 10000,
+          }
+        );
+
+        if (!isComponentMountedRef.current) return;
+
+        if (response.data.success) {
+          const userData = response.data.userData;
+          const authUser: AuthUser = {
+            id: userData.id || userData._id || 'user-id',
+            name: userData.name || 'User',
+            email: userData.email || 'user@example.com',
+            monthlyBudget: userData.monthlyBudget || 0,
+          };
+          
+          setUser(authUser);
+          setError(null);
+          lastValidationTimeRef.current = now;
+          
+          // Redirect to dashboard if on login page
+          if (isPublicRoute && requireAuth) {
+            router.push('/dashboard');
+          }
         } else {
-          setError(error.response?.data?.error || 'Failed to validate session');
+          handleAuthError(response.data.error || 'Session validation failed');
         }
-      } else {
-        setError('Network error. Please check your connection.');
+      } catch (error) {
+        if (!isComponentMountedRef.current) return;
+        
+        if (axios.isAxiosError(error)) {
+          const status = error.response?.status;
+          if (error.code === 'ECONNABORTED') {
+            setError('Connection timeout. Please check your internet connection.');
+          } else if (status === 401) {
+            handleAuthError('Session expired. Please login again.');
+          } else if (status === 429) {
+            // Rate limited - wait and retry
+            console.warn('Rate limited, retrying in 5 seconds...');
+            setTimeout(() => {
+              if (isComponentMountedRef.current) {
+                validateSession(true);
+              }
+            }, 5000);
+            return;
+          } else if (typeof status === 'number' && status >= 500) {
+            setError('Server error. Please try again later.');
+          } else {
+            setError(error.response?.data?.error || 'Failed to validate session');
+          }
+        } else {
+          setError('Network error. Please check your connection.');
+        }
+      } finally {
+        if (isComponentMountedRef.current) {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
-  };
+    })();
+    
+    sessionValidationRef.current = validationPromise;
+    return validationPromise;
+  }, [requireAuth, isPublicRoute, router]);
 
-  const handleAuthError = (errorMessage: string) => {
+  const handleAuthError = useCallback((errorMessage: string) => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
@@ -134,30 +176,74 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
     if (requireAuth && !isPublicRoute) {
       router.push('/login');
     }
-  };
+  }, [requireAuth, isPublicRoute, router]);
 
-  const login = (userData: AuthUser, token: string) => {
-    localStorage.setItem('token', token);
+  const login = useCallback((userData: AuthUser, token: string) => {
+    localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
     setError(null);
-    router.push('/');
-  };
+    router.push('/dashboard');
+  }, [router]);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
     router.push('/login');
-  };
+  }, [router]);
 
-  const updateUser = (userData: Partial<AuthUser>) => {
-    if (user) {
-      const updatedUser = { ...user, ...userData };
-      setUser(updatedUser);
+  const updateUser = useCallback((userData: Partial<AuthUser>) => {
+    setUser(currentUser => {
+      if (!currentUser) return null;
+      const updatedUser = { ...currentUser, ...userData };
       localStorage.setItem('user', JSON.stringify(updatedUser));
+      return updatedUser;
+    });
+  }, []);
+
+  const refreshSession = useCallback(async () => {
+    await validateSession(true);
+  }, [validateSession]);
+
+  // Effect for initial session validation
+  useEffect(() => {
+    isComponentMountedRef.current = true;
+    validateSession();
+    
+    return () => {
+      isComponentMountedRef.current = false;
+    };
+  }, [validateSession]);
+
+  // Effect for pathname changes - validate session on navigation
+  useEffect(() => {
+    if (isComponentMountedRef.current && user) {
+      // Only validate if we have a user and it's been more than 30 seconds
+      const now = Date.now();
+      if ((now - lastValidationTimeRef.current) > 30000) {
+        validateSession();
+      }
     }
-  };
+  }, [pathname, user, validateSession]);
+
+  // Effect for handling visibility changes (when user comes back to the tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user && isComponentMountedRef.current) {
+        const now = Date.now();
+        // If it's been more than 5 minutes since last validation, refresh
+        if ((now - lastValidationTimeRef.current) > 300000) {
+          validateSession(true);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user, validateSession]);
 
   // Show loading state
   if (loading) {
@@ -171,10 +257,41 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
     );
   }
 
+  // Show error state if there's an error and no user
+  if (error && !user && requireAuth && !isPublicRoute) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <p className="text-red-800">{error}</p>
+          </div>
+          <button 
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              validateSession(true);
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // For public routes, show content if no user or if user exists
   if (!requireAuth || isPublicRoute) {
     return (
-      <AuthContext.Provider value={{ user, loading, error, login, logout, updateUser }}>
+      <AuthContext.Provider value={{ 
+        user, 
+        loading, 
+        error, 
+        login, 
+        logout, 
+        updateUser, 
+        refreshSession 
+      }}>
         {children}
       </AuthContext.Provider>
     );
@@ -186,7 +303,15 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, logout, updateUser }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      error, 
+      login, 
+      logout, 
+      updateUser, 
+      refreshSession 
+    }}>
       {children}
     </AuthContext.Provider>
   );

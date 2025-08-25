@@ -5,7 +5,6 @@ import React, { useState } from 'react';
 import { useAuth } from '@/components/auth/AuthGuard';
 import { ExpenseSummary } from '@/components/dashboard/ExpenseSummary';
 import { BudgetProgress } from '@/components/dashboard/BudgetProgress';
-import { useDashboard } from '@/hooks/useDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +22,7 @@ import {
 import { formatCurrency } from '@/lib/dashboard-utils';
 import { cn } from '@/lib/utils';
 import { CATEGORY_COLORS, CATEGORY_NAMES } from '@/constants/dashboard';
+import { useDashboard } from '@/contexts/DashboardContext';
 
 export default function BudgetPage() {
   const { user, logout } = useAuth();
@@ -38,7 +38,7 @@ export default function BudgetPage() {
     updateBudget,
     refreshData,
     retryOperation,
-  } = useDashboard({ onLogout: logout });
+  } = useDashboard();
 
   if (!user) return null;
 
