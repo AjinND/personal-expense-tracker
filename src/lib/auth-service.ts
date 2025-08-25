@@ -1,4 +1,5 @@
 // src/lib/auth-service.ts
+import { STORAGE_KEYS } from '@/constants/dashboard';
 import { AuthFormData, AuthResponse, User } from '@/types/auth';
 
 class AuthService {
@@ -78,7 +79,7 @@ class AuthService {
 
   getToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('token');
+    return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
   }
 
   isAuthenticated(): boolean {
@@ -99,7 +100,7 @@ class AuthService {
 
       if (result.success && result.token) {
         // Store token
-        localStorage.setItem('token', result.token);
+        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, result.token);
       }
 
       return result;

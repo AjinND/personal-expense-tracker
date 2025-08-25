@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { User } from '@/types/dashboard';
+import { STORAGE_KEYS } from '@/constants/dashboard';
 
 export default function CalendarPage() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
     const userData = localStorage.getItem('user');
     
     if (!token || !userData) {

@@ -1,6 +1,7 @@
 // src/components/dev/DebugHelper.tsx
 'use client';
 
+import { STORAGE_KEYS } from '@/constants/dashboard';
 import React, { useState, useEffect } from 'react';
 
 export const DebugHelper: React.FC = () => {
@@ -18,8 +19,8 @@ export const DebugHelper: React.FC = () => {
 
   const checkDebugInfo = () => {
     const info = {
-      authToken: localStorage.getItem('token'),
-      authTokenExists: !!localStorage.getItem('token'),
+      authToken: localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN),
+      authTokenExists: !!localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN),
       currentUrl: window.location.href,
       userAgent: navigator.userAgent,
       localStorage: { ...localStorage },
@@ -65,7 +66,7 @@ export const DebugHelper: React.FC = () => {
 
     try {
       // Test 3: Expenses with auth (if token exists)
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
       if (token) {
         console.log('🔍 Testing /api/expenses with auth token...');
         const authExpensesResponse = await fetch('/api/expenses', {
@@ -100,7 +101,7 @@ export const DebugHelper: React.FC = () => {
   };
 
   const setMockToken = () => {
-    localStorage.setItem('token', 'mock-jwt-token-for-testing');
+    localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, 'mock-jwt-token-for-testing');
     checkDebugInfo();
     alert('Mock token set!');
   };

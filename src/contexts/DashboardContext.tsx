@@ -1,5 +1,7 @@
-// src/hooks/useDashboard.ts
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+// src/contexts/DashboardContext.tsx - Updated with centralized debug
+'use client';
+
+import React, { createContext, useContext, useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { DateRange } from 'react-day-picker';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -19,12 +21,9 @@ import {
 } from '@/lib/dashboard-utils';
 import { dashboardApi } from '@/services/dashboard-api';
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '@/constants/dashboard';
+import { debug } from '@/utils/debug-client'; // Import centralized debug
 
-interface UseDashboardProps {
-  onLogout: () => void;
-}
-
-interface UseDashboardReturn extends DashboardState {
+interface DashboardContextType extends DashboardState {
   metrics: DashboardMetrics;
   addExpense: (category: ExpenseCategory, amount: number, date: string) => Promise<void>;
   updateBudget: (budget: number) => Promise<void>;
@@ -33,13 +32,24 @@ interface UseDashboardReturn extends DashboardState {
   retryOperation: () => Promise<void>;
 }
 
-export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardReturn => {
+const DashboardContext = createContext<DashboardContextType | null>(null);
+
+interface DashboardProviderProps {
+  children: React.ReactNode;
+  onLogout: () => void;
+}
+
+export const DashboardProvider: React.FC<DashboardProviderProps> = ({
+  children,
+  onLogout,
+}) => {
   const { toast } = useToast();
   
   // Use refs to store stable references
   const toastRef = useRef(toast);
   const onLogoutRef = useRef(onLogout);
   const initializedRef = useRef(false);
+  const fetchingRef = useRef(false);
 
   // Update refs when props change
   toastRef.current = toast;
@@ -56,14 +66,22 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
   });
 
   // Memoized metrics calculation
-  const metrics = useMemo(
-    () => calculateDashboardMetrics(state.expenseData, state.dateRange, state.totalBalance),
-    [state.expenseData, state.dateRange, state.totalBalance]
-  );
+  const metrics = useMemo(() => {
+    const startTime = performance.now();
+    const result = calculateDashboardMetrics(state.expenseData, state.dateRange, state.totalBalance);
+    
+    debug.perf('calculateMetrics', 'Dashboard metrics calculation', {
+      duration: performance.now() - startTime,
+      expenseCount: state.expenseData.length,
+      totalExpenses: result.totalExpenses
+    });
+    
+    return result;
+  }, [state.expenseData, state.dateRange, state.totalBalance]);
 
-  // Stable error handler with ref-based dependencies
+  // Stable error handler
   const handleError = useCallback((error: unknown, context: string) => {
-    console.error(`Dashboard error in ${context}:`, error);
+    debug.dashboardError(`Error in ${context}`, { error });
     
     let errorMessage: string = ERROR_MESSAGES.SERVER_ERROR;
     let shouldLogout = false;
@@ -74,11 +92,12 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
       if (error.code === 'SESSION_EXPIRED' || error.statusCode === 401) {
         shouldLogout = true;
         errorMessage = 'Your session has expired. Please login again.';
+        debug.auth('Session expired, will logout user');
       }
     } else if (error instanceof Error) {
-      // Handle network errors or other JavaScript errors
       if (error.message.includes('Network Error') || error.message.includes('fetch')) {
         errorMessage = 'Network error. Please check your connection.';
+        debug.dashboard('Network error detected');
       } else {
         errorMessage = error.message || ERROR_MESSAGES.SERVER_ERROR;
       }
@@ -97,7 +116,10 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
         description: errorMessage,
         variant: 'destructive',
       });
-      setTimeout(() => onLogoutRef.current(), 1500);
+      setTimeout(() => {
+        debug.auth('Logging out user due to session expiry');
+        onLogoutRef.current();
+      }, 1500);
     } else {
       toastRef.current({
         title: 'Error',
@@ -105,12 +127,20 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
         variant: 'destructive',
       });
     }
-  }, []); // Empty dependency array - uses refs for stable references
+  }, []);
 
-  // Fetch expenses with stable dependencies
+  // Fetch expenses with concurrency protection and debug
   const fetchExpenses = useCallback(async () => {
+    if (fetchingRef.current) {
+      debug.dashboard('Fetch already in progress, skipping duplicate request');
+      return;
+    }
+
+    fetchingRef.current = true;
+    const startTime = performance.now();
+    
     try {
-      console.log('Fetching expenses...');
+      debug.dashboard('Starting to fetch expenses');
       
       const expenses = await dashboardApi.getExpenses({
         sortBy: 'date',
@@ -118,7 +148,10 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
         limit: 50
       });
       
-      console.log('Expenses fetched:', expenses);
+      debug.dashboard('Expenses fetched successfully', { 
+        count: expenses.length,
+        duration: performance.now() - startTime 
+      });
       
       const sortedExpenses = sortExpensesByDate(expenses || []);
       
@@ -128,84 +161,116 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
         error: null,
       }));
     } catch (error) {
-      console.error('Fetch expenses failed:', error);
+      debug.dashboardError('Failed to fetch expenses', { 
+        error,
+        duration: performance.now() - startTime 
+      });
       handleError(error, 'fetchExpenses');
+    } finally {
+      fetchingRef.current = false;
     }
   }, [handleError]);
 
-  // Fetch monthly budget with stable dependencies
+  // Fetch monthly budget with debug
   const fetchMonthlyBudget = useCallback(async () => {
+    const startTime = performance.now();
+    
     try {
-      console.log('Fetching monthly budget...');
+      debug.dashboard('Starting to fetch monthly budget');
       const budget = await dashboardApi.getMonthlyBudget();
-      console.log('Budget fetched:', budget);
+      
+      debug.dashboard('Monthly budget fetched successfully', { 
+        budget,
+        duration: performance.now() - startTime 
+      });
       
       setState(prev => ({ 
         ...prev, 
         totalBalance: budget || 0 
       }));
     } catch (error) {
-      console.error('Fetch budget failed:', error);
+      debug.dashboardError('Failed to fetch monthly budget', { 
+        error,
+        duration: performance.now() - startTime 
+      });
       handleError(error, 'fetchMonthlyBudget');
     }
   }, [handleError]);
 
-  // Initial data load with stable dependencies
+  // Initial data load with debug
   const loadInitialData = useCallback(async () => {
-    if (initializedRef.current) {
-      console.log('Dashboard already initialized, skipping...');
+    if (initializedRef.current || fetchingRef.current) {
+      debug.dashboard('Dashboard already initialized or fetching, skipping');
       return;
     }
 
+    const startTime = performance.now();
     setState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      console.log('Starting initial data load...');
+      debug.dashboard('Starting initial data load...');
       
-      // Load data sequentially to better identify which call fails
-      await fetchExpenses();
-      await fetchMonthlyBudget();
+      await Promise.all([fetchExpenses(), fetchMonthlyBudget()]);
       
-      console.log('Initial data load completed successfully');
+      debug.dashboard('Initial data load completed successfully', {
+        duration: performance.now() - startTime
+      });
       initializedRef.current = true;
     } catch (error) {
-      console.error('Initial data load failed:', error);
+      debug.dashboardError('Initial data load failed', { 
+        error,
+        duration: performance.now() - startTime 
+      });
       handleError(error, 'loadInitialData');
     } finally {
       setState(prev => ({ ...prev, loading: false }));
     }
   }, [fetchExpenses, fetchMonthlyBudget, handleError]);
 
-  // Refresh data - different from initial load, can be called multiple times
+  // Refresh data with debug
   const refreshData = useCallback(async () => {
+    const startTime = performance.now();
     setState(prev => ({ ...prev, refreshing: true, error: null }));
     
     try {
-      await fetchExpenses();
-      await fetchMonthlyBudget();
+      debug.dashboard('Starting data refresh...');
+      
+      await Promise.all([fetchExpenses(), fetchMonthlyBudget()]);
+      
+      debug.dashboard('Data refresh completed successfully', {
+        duration: performance.now() - startTime
+      });
       
       toastRef.current({
         title: 'Success',
         description: SUCCESS_MESSAGES.DATA_REFRESHED,
       });
     } catch (error) {
+      debug.dashboardError('Data refresh failed', { 
+        error,
+        duration: performance.now() - startTime 
+      });
       handleError(error, 'refreshData');
     } finally {
       setState(prev => ({ ...prev, refreshing: false }));
     }
   }, [fetchExpenses, fetchMonthlyBudget, handleError]);
 
-  // Add expense with optimistic updates
+  // Add expense with debug
   const addExpense = useCallback(async (
     category: ExpenseCategory,
     amount: number,
     date: string
   ) => {
+    const startTime = performance.now();
+    debug.dashboard('Adding expense', { category, amount, date });
+    
     // Validation
     const amountValidation = validateExpenseAmount(amount);
     const dateValidation = validateExpenseDate(date);
     
     if (!amountValidation.isValid) {
+      debug.dashboard('Invalid expense amount', { amount, errors: amountValidation.errors });
       toastRef.current({
         title: 'Invalid Amount',
         description: amountValidation.errors[0],
@@ -215,6 +280,7 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
     }
     
     if (!dateValidation.isValid) {
+      debug.dashboard('Invalid expense date', { date, errors: dateValidation.errors });
       toastRef.current({
         title: 'Invalid Date',
         description: dateValidation.errors[0],
@@ -233,6 +299,7 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
           ...updated[existingIndex],
           [category]: updated[existingIndex][category] + amount,
         };
+        debug.ui('Applied optimistic update to existing expense', { date, category, amount });
         return sortExpensesByDate(updated);
       } else {
         const newEntry: ExpenseEntry = {
@@ -247,6 +314,7 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
+        debug.ui('Created optimistic new expense entry', { newEntry });
         return sortExpensesByDate([...prevExpenses, newEntry]);
       }
     };
@@ -265,10 +333,20 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
         const updated = prev.expenseData.filter(exp => 
           exp.date !== updatedExpense.date || exp._id?.startsWith('temp-')
         );
-        return {
+        const result = {
           ...prev,
           expenseData: sortExpensesByDate([...updated, updatedExpense]),
         };
+        
+        debug.dashboard('Expense added successfully', { 
+          category, 
+          amount, 
+          date,
+          duration: performance.now() - startTime,
+          totalExpenses: result.expenseData.length
+        });
+        
+        return result;
       });
 
       toastRef.current({
@@ -276,31 +354,49 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
         description: `${amount.toFixed(2)} added to ${category}`,
       });
     } catch (error) {
+      debug.dashboardError('Failed to add expense, reverting optimistic update', { 
+        error,
+        duration: performance.now() - startTime 
+      });
       // Revert optimistic update on failure
       await fetchExpenses();
       handleError(error, 'addExpense');
     }
   }, [fetchExpenses, handleError]);
 
-  // Update budget
+  // Update budget with debug
   const updateBudget = useCallback(async (budget: number) => {
+    const startTime = performance.now();
+    debug.dashboard('Updating budget', { newBudget: budget });
+    
     try {
       const updatedBudget = await dashboardApi.updateMonthlyBudget(budget);
       
       setState(prev => ({ ...prev, totalBalance: updatedBudget }));
+      
+      debug.dashboard('Budget updated successfully', { 
+        oldBudget: budget,
+        newBudget: updatedBudget,
+        duration: performance.now() - startTime 
+      });
       
       toastRef.current({
         title: 'Budget Updated',
         description: `Monthly budget set to ${updatedBudget.toFixed(2)}`,
       });
     } catch (error) {
+      debug.dashboardError('Failed to update budget', { 
+        error,
+        duration: performance.now() - startTime 
+      });
       handleError(error, 'updateBudget');
     }
   }, [handleError]);
 
-  // Set date range with debouncing
+  // Set date range with debouncing and debug
   const debouncedSetDateRange = useMemo(
     () => debounce((range: DateRange | null) => {
+      debug.ui('Date range changed', { range });
       setState(prev => ({ ...prev, dateRange: range }));
     }, 300),
     []
@@ -310,21 +406,23 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
     debouncedSetDateRange(range);
   }, [debouncedSetDateRange]);
 
-  // Retry failed operations
+  // Retry operations with debug
   const retryOperation = useCallback(async () => {
-    initializedRef.current = false; // Allow re-initialization
+    debug.dashboard('Retrying failed operations...');
+    initializedRef.current = false;
+    fetchingRef.current = false;
     await loadInitialData();
   }, [loadInitialData]);
 
-  // Initialize dashboard - ONLY run once
+  // Initialize dashboard - only run once with debug
   useEffect(() => {
     if (!initializedRef.current) {
-      console.log('Dashboard hook initializing...');
+      debug.dashboard('Dashboard context initializing...');
       loadInitialData();
     }
-  }, []); // Empty dependency array - only run once on mount
+  }, [loadInitialData]);
 
-  return {
+  const contextValue: DashboardContextType = {
     ...state,
     metrics,
     addExpense,
@@ -333,95 +431,18 @@ export const useDashboard = ({ onLogout }: UseDashboardProps): UseDashboardRetur
     setDateRange,
     retryOperation,
   };
+
+  return (
+    <DashboardContext.Provider value={contextValue}>
+      {children}
+    </DashboardContext.Provider>
+  );
 };
 
-// Hook for expense operations
-export const useExpenseOperations = () => {
-  const [loading, setLoading] = useState(false);
-  const toastRef = useRef<any>(null);
-  const { toast } = useToast();
-  
-  // Keep toast reference stable
-  toastRef.current = toast;
-
-  const deleteExpense = useCallback(async (expenseId: string) => {
-    setLoading(true);
-    try {
-      await dashboardApi.deleteExpense(expenseId);
-      toastRef.current({
-        title: 'Success',
-        description: 'Expense deleted successfully',
-      });
-      return true;
-    } catch (error) {
-      console.error('Delete expense error:', error);
-      toastRef.current({
-        title: 'Error',
-        description: 'Failed to delete expense',
-        variant: 'destructive',
-      });
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const updateExpense = useCallback(async (
-    expenseId: string,
-    updates: Partial<Pick<ExpenseEntry, 'food' | 'shopping' | 'travelling' | 'entertainment'>>
-  ) => {
-    setLoading(true);
-    try {
-      const updatedExpense = await dashboardApi.updateExpense(expenseId, updates);
-      toastRef.current({
-        title: 'Success',
-        description: 'Expense updated successfully',
-      });
-      return updatedExpense;
-    } catch (error) {
-      console.error('Update expense error:', error);
-      toastRef.current({
-        title: 'Error',
-        description: 'Failed to update expense',
-        variant: 'destructive',
-      });
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  return {
-    deleteExpense,
-    updateExpense,
-    loading,
-  };
-};
-
-// Hook for chart data
-export const useChartData = (expenses: ExpenseEntry[], dateRange: DateRange | null) => {
-  return useMemo(() => {
-    try {
-      // Dynamic import to avoid issues
-      const { prepareChartData, preparePieChartData, filterExpensesByDateRange, calculateCategoryTotals } = require('@/lib/dashboard-utils');
-      
-      const filteredExpenses = filterExpensesByDateRange(expenses, dateRange);
-      const chartData = prepareChartData(filteredExpenses);
-      const categoryTotals = calculateCategoryTotals(filteredExpenses);
-      const pieChartData = preparePieChartData(categoryTotals);
-      
-      return {
-        lineChartData: chartData,
-        pieChartData,
-        barChartData: chartData,
-      };
-    } catch (error) {
-      console.error('Chart data processing error:', error);
-      return {
-        lineChartData: [],
-        pieChartData: [],
-        barChartData: [],
-      };
-    }
-  }, [expenses, dateRange]);
+export const useDashboard = () => {
+  const context = useContext(DashboardContext);
+  if (!context) {
+    throw new Error('useDashboard must be used within a DashboardProvider');
+  }
+  return context;
 };
