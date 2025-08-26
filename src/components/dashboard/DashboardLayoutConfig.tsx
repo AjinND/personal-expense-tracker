@@ -4,7 +4,6 @@
 import React, { useState } from 'react';
 import { Settings, Eye, EyeOff, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import {
@@ -13,22 +12,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
-
-export interface DashboardConfig {
-  showQuickStats: boolean;
-  showCharts: boolean;
-  showRecentTransactions: boolean;
-  showBudgetProgress: boolean;
-  showInsights: boolean;
-  compactMode: boolean;
-  autoRefresh: boolean;
-}
-
-interface DashboardLayoutConfigProps {
-  config: DashboardConfig;
-  onConfigChange: (config: DashboardConfig) => void;
-  className?: string;
-}
+import { DashboardConfig, DashboardLayoutConfigProps } from '@/types/dashboard';
 
 const defaultConfig: DashboardConfig = {
   showQuickStats: true,

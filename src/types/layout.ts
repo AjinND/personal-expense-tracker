@@ -1,4 +1,5 @@
 // src/types/layout.ts
+import { LucideIcon } from 'lucide-react';
 import { ReactNode } from 'react';
 
 export interface DashboardLayoutProps {
@@ -67,15 +68,15 @@ export interface ThemeContextProps {
 }
 
 export interface LoadingStateProps {
-  isLoading: boolean;
-  loadingText?: string;
-  overlay?: boolean;
+  variant?: 'spinner' | 'skeleton' | 'dots';
+  size?: 'sm' | 'md' | 'lg';
+  text?: string;
   className?: string;
+  count?: number; // For skeleton variant
 }
-
 export interface ErrorBoundaryState {
   hasError: boolean;
-  error?: Error;
+  error?: Error | null;
   errorInfo?: any;
 }
 
@@ -83,4 +84,33 @@ export interface ErrorFallbackProps {
   error: Error;
   resetError: () => void;
   className?: string;
+}
+
+export interface PageHeaderProps {
+  title: string;
+  description?: string;
+  icon?: LucideIcon;
+  badge?: {
+    text: string;
+    variant?: 'default' | 'secondary' | 'destructive' | 'outline';
+    className?: string;
+  };
+  actions?: React.ReactNode;
+  className?: string;
+}
+
+export interface StatCardProps {
+  title: string;
+  value: string | number;
+  icon?: LucideIcon;
+  description?: string;
+  trend?: {
+    value: number;
+    isPositive: boolean;
+    label?: string;
+  };
+  variant?: 'default' | 'primary' | 'success' | 'warning' | 'danger';
+  loading?: boolean;
+  className?: string;
+  onClick?: () => void;
 }

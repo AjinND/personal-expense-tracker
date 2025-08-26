@@ -31,7 +31,8 @@ import {
   ExpenseEntry, 
   CategoryTotals,
   ChartDataPoint,
-  PieChartDataPoint 
+  PieChartDataPoint, 
+  DashboardChartsProps
 } from "@/types/dashboard";
 import { 
   CATEGORY_COLORS,
@@ -43,15 +44,6 @@ import {
   preparePieChartData,
 } from "@/lib/dashboard-utils";
 import { cn } from "@/lib/utils";
-
-interface DashboardChartsProps {
-  expenses: ExpenseEntry[];
-  categoryTotals: CategoryTotals;
-  dateRange: DateRange | null;
-  onDateRangeChange: (range: DateRange | null) => void;
-  loading?: boolean;
-  className?: string;
-}
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {

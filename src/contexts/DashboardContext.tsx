@@ -21,7 +21,7 @@ import {
 } from '@/lib/dashboard-utils';
 import { dashboardApi } from '@/services/dashboard-api';
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '@/constants/dashboard';
-import { debug } from '@/utils/debug-client'; // Import centralized debug
+import { debug } from '@/utils/debug'; // Import centralized debug
 
 interface DashboardContextType extends DashboardState {
   metrics: DashboardMetrics;

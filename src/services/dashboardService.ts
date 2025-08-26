@@ -14,10 +14,10 @@ import {
   ExpenseQueryParams,
   ExpenseStats,
   DashboardResponse,
-  DashboardError,
-  DashboardErrorCodes,
-  VALIDATION_CONSTANTS
+  VALIDATION_CONSTANTS,
+  DashboardErrorCodes
 } from '@/types/dashboard-backend';
+import { DashboardError } from '@/types/dashboard';
 
 export class DashboardService {
   private limiter: ReturnType<typeof rateLimit>;

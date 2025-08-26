@@ -35,20 +35,7 @@ import { Badge } from "@/components/ui/badge";
 import { DashboardMetrics } from "@/types/dashboard";
 import { getBudgetStatus, formatCurrency, validateBudgetAmount } from "@/lib/dashboard-utils";
 import { cn } from "@/lib/utils";
-
-interface ExpenseSummaryProps {
-  metrics: DashboardMetrics;
-  totalBalance: number;
-  onBudgetUpdate: (budget: number) => Promise<void>;
-  loading?: boolean;
-  monthlyChange?: number;
-  topCategory?: {
-    name: string;
-    amount: number;
-    icon: React.ElementType;
-  };
-  className?: string;
-}
+import { ExpenseSummaryProps } from "@/types/components";
 
 interface StatCardProps {
   title: string;

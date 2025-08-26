@@ -63,15 +63,25 @@ export interface LogoutRequest {
   refreshToken: string;
 }
 
+// export interface AuthUser {
+//   id: string;
+//   name: string;
+//   email: string;
+//   monthlyBudget: number;
+//   emailVerified: boolean;
+//   isActive: boolean;
+//   createdAt: Date;
+//   updatedAt: Date;
+// }
+
 export interface AuthUser {
   id: string;
+  avatar?: string;
   name: string;
   email: string;
-  monthlyBudget: number;
-  emailVerified: boolean;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  monthlyBudget?: number;
+  emailVerified?: boolean;
+  createdAt?: Date;
 }
 
 export interface AuthResponse {
@@ -82,6 +92,16 @@ export interface AuthResponse {
   error?: string;
   message?: string;
   expiresIn?: string;
+}
+
+export interface AuthContextType {
+  user: AuthUser | null;
+  loading: boolean;
+  error: string | null;
+  login: (userData: AuthUser, token: string) => void;
+  logout: () => void;
+  updateUser: (userData: Partial<AuthUser>) => void;
+  refreshSession: () => Promise<void>;
 }
 
 export interface SecurityConfig {

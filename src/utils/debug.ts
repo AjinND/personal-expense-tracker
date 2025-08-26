@@ -1,12 +1,13 @@
 // src/utils/debug.ts
 /**
- * Centralized Debug System
- * - Only works in development environment
+ * Centralized Debug System with SSR Support
+ * - Works in both server and client environments
+ * - Only functions in development environment
  * - Can be toggled on/off via localStorage or environment variable
  * - Organized debug categories for different parts of the app
  */
 
-type DebugCategory = 
+export type DebugCategory = 
   | 'api'           // API calls, responses, errors
   | 'auth'          // Authentication, sessions, tokens
   | 'dashboard'     // Dashboard data, hooks, context
@@ -35,18 +36,27 @@ interface DebugLogEntry {
   stackTrace?: string;
 }
 
+interface DebugStatus {
+  enabled: boolean;
+  environment: 'development' | 'production';
+  categories: string[];
+  totalLogs: number;
+  config: DebugConfig;
+}
+
 class DebugManager {
   private static instance: DebugManager;
   private config: DebugConfig;
   private logs: DebugLogEntry[] = [];
   private readonly STORAGE_KEY = 'expense_tracker_debug';
   private readonly isDevelopment = process.env.NODE_ENV === 'development';
+  private readonly isServer = typeof window === 'undefined';
 
   private constructor() {
     this.config = this.loadConfig();
     
-    // Only setup in development
-    if (this.isDevelopment) {
+    // Only setup in development and client-side
+    if (this.isDevelopment && !this.isServer) {
       this.setupGlobalDebugger();
       this.setupPerformanceMonitoring();
     }
@@ -74,9 +84,8 @@ class DebugManager {
       return { ...defaultConfig, enabled: false };
     }
 
-    // Check if we're in a browser environment
-    if (typeof window === 'undefined') {
-      // Server-side: use environment variables only
+    // Server-side: use environment variables only
+    if (this.isServer) {
       if (process.env.NEXT_PUBLIC_DEBUG === 'true') {
         return {
           ...defaultConfig,
@@ -111,9 +120,9 @@ class DebugManager {
     return defaultConfig;
   }
 
-  // Save debug configuration
+  // Save debug configuration (client-side only)
   private saveConfig(): void {
-    if (!this.isDevelopment || typeof window === 'undefined') return;
+    if (!this.isDevelopment || this.isServer) return;
 
     try {
       const configToSave = {
@@ -126,10 +135,9 @@ class DebugManager {
     }
   }
 
-  // Setup global debugger functions
+  // Setup global debugger functions (client-side only)
   private setupGlobalDebugger(): void {
-    // Only setup in browser environment
-    if (typeof window === 'undefined') return;
+    if (this.isServer) return;
 
     (window as any).debug = {
       enable: () => this.enable(),
@@ -143,200 +151,130 @@ class DebugManager {
       disableAll: () => this.disableAllCategories(),
       
       // Log management
-      getLogs: () => this.getLogs(),
-      clearLogs: () => this.clearLogs(),
-      exportLogs: () => this.exportLogs(),
+      logs: () => this.getLogs(),
+      clear: () => this.clearLogs(),
+      export: () => this.exportLogs(),
       
-      // Status
+      // Status and help
       status: () => this.getStatus(),
       help: () => this.showHelp(),
     };
 
-    console.log('%c🐛 Debug System Available', 'color: #10B981; font-weight: bold;');
-    console.log('Type %cdebug.help()%c for available commands', 'color: #3B82F6; font-family: monospace;', '');
+    console.log('🐛 Debug system initialized. Type "debug.help()" for commands.');
   }
 
-  // Setup performance monitoring
+  // Setup performance monitoring (client-side only)
   private setupPerformanceMonitoring(): void {
-    if (typeof window !== 'undefined' && 'performance' in window) {
-      // Monitor navigation timing
+    if (this.isServer) return;
+
+    // Monitor performance timing
+    if ('performance' in window && 'addEventListener' in window) {
       window.addEventListener('load', () => {
         setTimeout(() => {
-          const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
-          if (navigation) {
-            this.perf('page_load', 'Page Load Timing', {
-              domContentLoaded: navigation.domContentLoadedEventEnd - navigation.domContentLoadedEventStart,
-              loadComplete: navigation.loadEventEnd - navigation.loadEventStart,
-              totalTime: navigation.loadEventEnd - navigation.navigationStart,
-            });
-          }
+          const timing = performance.timing;
+          const pageLoadTime = timing.loadEventEnd - timing.navigationStart;
+          this.perf('page-load', `Page loaded in ${pageLoadTime}ms`);
         }, 0);
       });
     }
   }
 
   // Core logging method
-  private log(
-    category: DebugCategory,
-    level: 'log' | 'warn' | 'error' | 'info',
-    message: string,
-    data?: any
-  ): void {
-    // Only log in development
-    if (!this.isDevelopment) return;
-
-    // Check if debug is enabled and category is active
-    if (!this.config.enabled || !this.config.categories.has(category)) {
+  private log(category: DebugCategory, level: 'log' | 'warn' | 'error' | 'info', message: string, data?: any): void {
+    // Do nothing if not development or not enabled
+    if (!this.isDevelopment || !this.config.enabled || !this.config.categories.has(category)) {
       return;
     }
 
-    const entry: DebugLogEntry = {
-      timestamp: Date.now(),
+    const timestamp = Date.now();
+    const logEntry: DebugLogEntry = {
+      timestamp,
       category,
       level,
       message,
       data,
-      stackTrace: this.config.showStackTrace ? new Error().stack : undefined,
+      ...(this.config.showStackTrace && { stackTrace: new Error().stack }),
     };
 
-    // Store log entry
+    // Add to logs array
     if (this.config.persistLogs) {
-      this.logs.push(entry);
+      this.logs.push(logEntry);
       
-      // Trim logs if exceeding max
+      // Trim logs if over max
       if (this.logs.length > this.config.maxLogs) {
         this.logs = this.logs.slice(-this.config.maxLogs);
       }
     }
 
-    // Format and output to console
-    const timestamp = this.config.showTimestamps 
-      ? new Date(entry.timestamp).toISOString().substr(11, 12) 
-      : '';
-    
-    const categoryBadge = `[${category.toUpperCase()}]`;
-    const prefix = `${timestamp} ${categoryBadge}`.trim();
+    // Only log to console on client-side
+    if (!this.isServer) {
+      const emoji = {
+        api: '🌐',
+        auth: '🔐', 
+        dashboard: '📊',
+        navigation: '🧭',
+        ui: '🎨',
+        storage: '💾',
+        performance: '⚡',
+        fallback: '🔧',
+        general: '🐛'
+      }[category] || '🐛';
 
-    // Category-specific colors and icons
-    const categoryStyles = this.getCategoryStyles(category);
-    
-    const consoleMethod = console[level] || console.log;
-    
-    if (data !== undefined) {
-      consoleMethod(
-        `%c${categoryStyles.icon}%c ${prefix} %c${message}`,
-        categoryStyles.iconStyle,
-        categoryStyles.prefixStyle,
-        categoryStyles.messageStyle,
-        data
-      );
-    } else {
-      consoleMethod(
-        `%c${categoryStyles.icon}%c ${prefix} %c${message}`,
-        categoryStyles.iconStyle,
-        categoryStyles.prefixStyle,
-        categoryStyles.messageStyle
-      );
-    }
+      const timeStr = this.config.showTimestamps 
+        ? `[${new Date(timestamp).toLocaleTimeString()}] `
+        : '';
 
-    // Show stack trace if enabled
-    if (this.config.showStackTrace && entry.stackTrace && level === 'error') {
-      console.groupCollapsed('Stack Trace');
-      console.log(entry.stackTrace);
-      console.groupEnd();
-    }
-  }
+      const logMessage = `${emoji} ${timeStr}[${category.toUpperCase()}] ${message}`;
 
-  // Get category-specific styling
-  private getCategoryStyles(category: DebugCategory) {
-    const styles = {
-      api: {
-        icon: '🌐',
-        iconStyle: 'font-size: 14px;',
-        prefixStyle: 'color: #3B82F6; font-weight: bold;',
-        messageStyle: 'color: #1F2937;'
-      },
-      auth: {
-        icon: '🔐',
-        iconStyle: 'font-size: 14px;',
-        prefixStyle: 'color: #EF4444; font-weight: bold;',
-        messageStyle: 'color: #1F2937;'
-      },
-      dashboard: {
-        icon: '📊',
-        iconStyle: 'font-size: 14px;',
-        prefixStyle: 'color: #10B981; font-weight: bold;',
-        messageStyle: 'color: #1F2937;'
-      },
-      navigation: {
-        icon: '🧭',
-        iconStyle: 'font-size: 14px;',
-        prefixStyle: 'color: #8B5CF6; font-weight: bold;',
-        messageStyle: 'color: #1F2937;'
-      },
-      ui: {
-        icon: '🎨',
-        iconStyle: 'font-size: 14px;',
-        prefixStyle: 'color: #F59E0B; font-weight: bold;',
-        messageStyle: 'color: #1F2937;'
-      },
-      storage: {
-        icon: '💾',
-        iconStyle: 'font-size: 14px;',
-        prefixStyle: 'color: #06B6D4; font-weight: bold;',
-        messageStyle: 'color: #1F2937;'
-      },
-      performance: {
-        icon: '⚡',
-        iconStyle: 'font-size: 14px;',
-        prefixStyle: 'color: #F97316; font-weight: bold;',
-        messageStyle: 'color: #1F2937;'
-      },
-      fallback: {
-        icon: '🔧',
-        iconStyle: 'font-size: 14px;',
-        prefixStyle: 'color: #EAB308; font-weight: bold;',
-        messageStyle: 'color: #1F2937;'
-      },
-      general: {
-        icon: '🐛',
-        iconStyle: 'font-size: 14px;',
-        prefixStyle: 'color: #6B7280; font-weight: bold;',
-        messageStyle: 'color: #1F2937;'
+      // Use appropriate console method
+      const consoleMethod = console[level] || console.log;
+      
+      if (data !== undefined) {
+        consoleMethod(logMessage, data);
+      } else {
+        consoleMethod(logMessage);
       }
-    };
-
-    return styles[category] || styles.general;
+    }
   }
 
-  // Public API methods
-  public enable(): void {
-    if (!this.isDevelopment || typeof window === 'undefined') return;
+  // Control methods
+  public enable(): boolean {
+    if (!this.isDevelopment) return false;
     this.config.enabled = true;
     this.saveConfig();
-    console.log('🐛 Debug mode enabled');
+    if (!this.isServer) {
+      console.log('🐛 Debug mode enabled');
+    }
+    return true;
   }
 
-  public disable(): void {
-    if (!this.isDevelopment || typeof window === 'undefined') return;
+  public disable(): boolean {
+    if (!this.isDevelopment) return false;
     this.config.enabled = false;
     this.saveConfig();
-    console.log('🐛 Debug mode disabled');
+    if (!this.isServer) {
+      console.log('🐛 Debug mode disabled');
+    }
+    return false;
   }
 
   public toggle(): boolean {
-    if (!this.isDevelopment || typeof window === 'undefined') return false;
-    this.config.enabled = !this.config.enabled;
+    if (!this.isDevelopment) return false;
+    const wasEnabled = this.config.enabled;
+    this.config.enabled = !wasEnabled;
     this.saveConfig();
-    console.log(`🐛 Debug mode ${this.config.enabled ? 'enabled' : 'disabled'}`);
+    if (!this.isServer) {
+      console.log(`🐛 Debug mode ${this.config.enabled ? 'enabled' : 'disabled'}`);
+    }
     return this.config.enabled;
   }
 
+  // Category management
   public enableCategory(category: DebugCategory): void {
     if (!this.isDevelopment) return;
     this.config.categories.add(category);
     this.saveConfig();
-    if (typeof window !== 'undefined') {
+    if (!this.isServer) {
       console.log(`🐛 Debug category '${category}' enabled`);
     }
   }
@@ -345,7 +283,7 @@ class DebugManager {
     if (!this.isDevelopment) return;
     this.config.categories.delete(category);
     this.saveConfig();
-    if (typeof window !== 'undefined') {
+    if (!this.isServer) {
       console.log(`🐛 Debug category '${category}' disabled`);
     }
   }
@@ -354,7 +292,7 @@ class DebugManager {
     if (!this.isDevelopment) return;
     this.config.categories = new Set(['api', 'auth', 'dashboard', 'navigation', 'ui', 'storage', 'performance', 'fallback', 'general']);
     this.saveConfig();
-    if (typeof window !== 'undefined') {
+    if (!this.isServer) {
       console.log('🐛 All debug categories enabled');
     }
   }
@@ -363,11 +301,12 @@ class DebugManager {
     if (!this.isDevelopment) return;
     this.config.categories.clear();
     this.saveConfig();
-    if (typeof window !== 'undefined') {
+    if (!this.isServer) {
       console.log('🐛 All debug categories disabled');
     }
   }
 
+  // Log management
   public getLogs(): DebugLogEntry[] {
     return [...this.logs];
   }
@@ -375,13 +314,14 @@ class DebugManager {
   public clearLogs(): void {
     if (!this.isDevelopment) return;
     this.logs = [];
-    if (typeof window !== 'undefined') {
+    if (!this.isServer) {
       console.log('🐛 Debug logs cleared');
     }
   }
 
   public exportLogs(): void {
-    if (!this.isDevelopment || typeof window === 'undefined') return;
+    if (!this.isDevelopment || this.isServer) return;
+    
     const data = JSON.stringify(this.logs, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -392,7 +332,8 @@ class DebugManager {
     URL.revokeObjectURL(url);
   }
 
-  public getStatus(): object {
+  // Status and help
+  public getStatus(): DebugStatus {
     return {
       enabled: this.config.enabled,
       environment: this.isDevelopment ? 'development' : 'production',
@@ -403,6 +344,8 @@ class DebugManager {
   }
 
   public showHelp(): void {
+    if (this.isServer) return;
+    
     console.group('🐛 Debug System Help');
     console.log('Available commands:');
     console.log('  debug.enable()              - Enable debug mode');
@@ -414,9 +357,9 @@ class DebugManager {
     console.log('  debug.enableAll()           - Enable all categories');
     console.log('  debug.disableAll()          - Disable all categories');
     console.log('');
-    console.log('  debug.getLogs()             - Get all debug logs');
-    console.log('  debug.clearLogs()           - Clear debug logs');
-    console.log('  debug.exportLogs()          - Export logs to file');
+    console.log('  debug.logs()                - Get all debug logs');
+    console.log('  debug.clear()               - Clear debug logs');
+    console.log('  debug.export()              - Export logs to file');
     console.log('');
     console.log('  debug.status()              - Show current status');
     console.log('');
@@ -482,9 +425,46 @@ class DebugManager {
   }
 }
 
-// Export singleton instance
-export const debug = DebugManager.getInstance();
+// Create debug instance - works in both server and client environments
+const debugInstance = DebugManager.getInstance();
 
-// Export types for use in other files
-export type { DebugCategory };
+// Export singleton instance with SSR-safe interface
+export const debug = {
+  // Category-specific logging
+  api: (message: string, data?: any) => debugInstance.api(message, data),
+  apiError: (message: string, data?: any) => debugInstance.apiError(message, data),
+  auth: (message: string, data?: any) => debugInstance.auth(message, data),
+  authWarn: (message: string, data?: any) => debugInstance.authWarn(message, data),
+  dashboard: (message: string, data?: any) => debugInstance.dashboard(message, data),
+  dashboardError: (message: string, data?: any) => debugInstance.dashboardError(message, data),
+  navigation: (message: string, data?: any) => debugInstance.navigation(message, data),
+  ui: (message: string, data?: any) => debugInstance.ui(message, data),
+  storage: (message: string, data?: any) => debugInstance.storage(message, data),
+  perf: (operation: string, message: string, data?: any) => debugInstance.perf(operation, message, data),
+  fallback: (message: string, data?: any) => debugInstance.fallback(message, data),
+  general: (message: string, data?: any) => debugInstance.general(message, data),
+
+  // Control methods
+  enable: () => debugInstance.enable(),
+  disable: () => debugInstance.disable(),
+  toggle: () => debugInstance.toggle(),
+
+  // Category management
+  enableCategory: (category: DebugCategory) => debugInstance.enableCategory(category),
+  disableCategory: (category: DebugCategory) => debugInstance.disableCategory(category),
+  enableAllCategories: () => debugInstance.enableAllCategories(),
+  disableAllCategories: () => debugInstance.disableAllCategories(),
+
+  // Log management
+  getLogs: () => debugInstance.getLogs(),
+  clearLogs: () => debugInstance.clearLogs(),
+  exportLogs: () => debugInstance.exportLogs(),
+
+  // Status
+  getStatus: () => debugInstance.getStatus(),
+  showHelp: () => debugInstance.showHelp(),
+  isEnabled: (category?: DebugCategory) => debugInstance.isEnabled(category),
+};
+
+// Export class and types for advanced usage
 export { DebugManager };

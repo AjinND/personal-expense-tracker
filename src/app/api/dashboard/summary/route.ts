@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { dashboardService } from "@/services/dashboardService";
 import { withAuth, withSecurityHeaders, withRateLimit } from "@/lib/auth";
 import { getClientIdentifier } from "@/lib/rate-limit";
-import { DashboardError } from "@/types/dashboard-backend";
+import { DashboardError } from "@/types/dashboard";
 import { AuthTokenPayload } from "@/types/auth-backend";
 
 // Helper function to create error response

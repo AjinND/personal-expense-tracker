@@ -1,12 +1,6 @@
 // src/types/dashboard.ts
 import { DateRange } from "react-day-picker";
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  monthlyBudget?: number;
-}
+import { User } from "./auth";
 
 export interface ExpenseEntry {
   _id?: string;
@@ -97,4 +91,62 @@ export class DashboardError extends Error {
 export interface ValidationResult {
   isValid: boolean;
   errors: string[];
+}
+
+export interface BudgetProgressProps {
+  totalExpenses: number;
+  monthlyBudget: number;
+  daysInMonth: number;
+  currentDay: number;
+  onEditBudget?: () => void;
+  loading?: boolean;
+  className?: string;
+}
+
+export interface CategoryCardsProps {
+  categoryTotals: CategoryTotals;
+  onAddExpense: (category: ExpenseCategory, amount: number, date: string) => Promise<void>;
+  loading?: boolean;
+  className?: string;
+}
+
+export interface DashboardChartsProps {
+  expenses: ExpenseEntry[];
+  categoryTotals: CategoryTotals;
+  dateRange: DateRange | null;
+  onDateRangeChange: (range: DateRange | null) => void;
+  loading?: boolean;
+  className?: string;
+}
+
+export interface DashboardHeaderProps {
+  user: User;
+  onRefresh: () => Promise<void>;
+  refreshing: boolean;
+  error: string | null;
+  onRetry: () => Promise<void>;
+  className?: string;
+}
+
+export interface DashboardConfig {
+  showQuickStats: boolean;
+  showCharts: boolean;
+  showRecentTransactions: boolean;
+  showBudgetProgress: boolean;
+  showInsights: boolean;
+  compactMode: boolean;
+  autoRefresh: boolean;
+}
+
+export interface DashboardLayoutConfigProps {
+  config: DashboardConfig;
+  onConfigChange: (config: DashboardConfig) => void;
+  className?: string;
+}
+
+export interface RecentTransactionsProps {
+  expenses: ExpenseEntry[];
+  loading?: boolean;
+  limit?: number;
+  className?: string;
 }

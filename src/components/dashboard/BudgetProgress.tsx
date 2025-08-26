@@ -17,16 +17,7 @@ import {
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/dashboard-utils';
 import { cn } from '@/lib/utils';
-
-interface BudgetProgressProps {
-  totalExpenses: number;
-  monthlyBudget: number;
-  daysInMonth: number;
-  currentDay: number;
-  onEditBudget?: () => void;
-  loading?: boolean;
-  className?: string;
-}
+import { BudgetProgressProps } from '@/types/dashboard';
 
 export const BudgetProgress: React.FC<BudgetProgressProps> = ({
   totalExpenses,

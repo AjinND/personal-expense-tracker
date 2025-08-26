@@ -5,17 +5,8 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { RefreshCw, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
-import { User } from '@/types/dashboard';
 import { cn } from '@/lib/utils';
-
-interface DashboardHeaderProps {
-  user: User;
-  onRefresh: () => Promise<void>;
-  refreshing: boolean;
-  error: string | null;
-  onRetry: () => Promise<void>;
-  className?: string;
-}
+import { DashboardHeaderProps } from '@/types/dashboard';
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   user,

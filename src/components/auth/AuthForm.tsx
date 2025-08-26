@@ -8,16 +8,8 @@ import { Loader2, AlertCircle, Mail, User } from 'lucide-react';
 import { FormInput } from './FormInput';
 import { PasswordInput } from './PasswordInput';
 import { validateForm, validateField } from '@/lib/auth-validation';
-import { AuthFormData, FormErrors, AuthMode, AuthResponse } from '@/types/auth';
+import { AuthFormData, FormErrors, AuthFormProps } from '@/types/auth';
 import { cn } from '@/lib/utils';
-
-interface AuthFormProps {
-  mode: AuthMode;
-  onSubmit: (data: AuthFormData) => Promise<AuthResponse>;
-  onModeChange: () => void;
-  isLoading?: boolean;
-  className?: string;
-}
 
 const initialFormData: AuthFormData = {
   email: '',

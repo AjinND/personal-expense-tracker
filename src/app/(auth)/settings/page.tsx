@@ -8,7 +8,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Settings as SettingsIcon, Palette, Globe, Database } from 'lucide-react';
-import { User } from '@/types/dashboard';
+import { User } from '@/types/auth';
 import { STORAGE_KEYS } from '@/constants/dashboard';
 
 export default function SettingsPage() {

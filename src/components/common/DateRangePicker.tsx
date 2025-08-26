@@ -4,7 +4,6 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { Calendar as CalendarIcon } from 'lucide-react';
-import { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -20,14 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-interface DateRangePickerProps {
-  value?: DateRange;
-  onChange: (range: DateRange | undefined) => void;
-  className?: string;
-  align?: 'start' | 'center' | 'end';
-  showPresets?: boolean;
-}
+import { DateRangePickerProps } from '@/types/components';
 
 const presets = [
   {

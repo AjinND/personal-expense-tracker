@@ -6,27 +6,11 @@ import { useRouter, usePathname } from 'next/navigation';
 import axios from 'axios';
 import { Loader2 } from 'lucide-react';
 import { STORAGE_KEYS } from '@/constants/dashboard';
+import { AuthContextType, AuthUser } from '@/types/auth-backend';
 
 interface AuthGuardProps {
   children: React.ReactNode;
   requireAuth?: boolean;
-}
-
-export interface AuthUser {
-  id: string;
-  name: string;
-  email: string;
-  monthlyBudget?: number;
-}
-
-interface AuthContextType {
-  user: AuthUser | null;
-  loading: boolean;
-  error: string | null;
-  login: (userData: AuthUser, token: string) => void;
-  logout: () => void;
-  updateUser: (userData: Partial<AuthUser>) => void;
-  refreshSession: () => Promise<void>;
 }
 
 // Create Auth Context
@@ -113,10 +97,11 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
         if (response.data.success) {
           const userData = response.data.userData;
           const authUser: AuthUser = {
-            id: userData.id || userData._id || 'user-id',
-            name: userData.name || 'User',
-            email: userData.email || 'user@example.com',
+            id: userData.id || userData._id || '',
+            name: userData.name || '',
+            email: userData.email || '',
             monthlyBudget: userData.monthlyBudget || 0,
+            avatar: userData.avatar || '',
           };
           
           setUser(authUser);

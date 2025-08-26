@@ -41,3 +41,11 @@ export interface PasswordStrength {
   feedback: string[];
   isValid: boolean;
 }
+
+export interface AuthFormProps {
+  mode: AuthMode;
+  onSubmit: (data: AuthFormData) => Promise<AuthResponse>;
+  onModeChange: () => void;
+  isLoading?: boolean;
+  className?: string;
+}

@@ -2,23 +2,9 @@
 'use client';
 
 import React from 'react';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { LucideIcon } from 'lucide-react';
-
-interface PageHeaderProps {
-  title: string;
-  description?: string;
-  icon?: LucideIcon;
-  badge?: {
-    text: string;
-    variant?: 'default' | 'secondary' | 'destructive' | 'outline';
-    className?: string;
-  };
-  actions?: React.ReactNode;
-  className?: string;
-}
+import { PageHeaderProps } from '@/types/layout';
 
 export const PageHeader: React.FC<PageHeaderProps> = ({
   title,

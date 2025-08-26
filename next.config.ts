@@ -1,6 +1,7 @@
-// next.config.ts - Enhanced configuration with Debug System
+// next.config.ts
 import type { NextConfig } from 'next';
 import path from 'path';
+import { env, config } from './src/lib/env';
 
 const nextConfig: NextConfig = {
   // Enable experimental features
@@ -10,19 +11,19 @@ const nextConfig: NextConfig = {
   },
   
   // Webpack configuration
-  webpack: (config, { dev, isServer }) => {
+  webpack: (webpackConfig, { dev, isServer }) => {
     // Optimize bundle size
     if (!dev && !isServer) {
-      config.optimization.splitChunks.chunks = 'all';
+      webpackConfig.optimization.splitChunks.chunks = 'all';
       
-      // DEBUG SYSTEM: Replace debug calls with no-ops in production
-      config.resolve.alias = {
-        ...config.resolve.alias,
+      // Replace debug calls with no-ops in production
+      webpackConfig.resolve.alias = {
+        ...webpackConfig.resolve.alias,
         '@/utils/debug': path.resolve(__dirname, 'src/utils/debug-production.ts')
       };
     }
     
-    return config;
+    return webpackConfig;
   },
   
   // Image optimization
@@ -31,148 +32,213 @@ const nextConfig: NextConfig = {
     formats: ['image/webp', 'image/avif'],
   },
   
+  // Environment variables to expose to client
+  env: {
+    CUSTOM_KEY: process.env.CUSTOM_KEY,
+    NEXT_PUBLIC_APP_NAME: env.APP_NAME,
+    NEXT_PUBLIC_APP_VERSION: env.APP_VERSION,
+    NEXT_PUBLIC_DEBUG: env.DEBUG.toString(),
+    DEBUG_BUILD_TIME: new Date().toISOString(),
+  },
+  
   // Security headers
   async headers() {
+    const headers = [
+      {
+        key: 'X-Frame-Options',
+        value: 'DENY'
+      },
+      {
+        key: 'X-Content-Type-Options',
+        value: 'nosniff'
+      },
+      {
+        key: 'Referrer-Policy',
+        value: 'strict-origin-when-cross-origin'
+      },
+      {
+        key: 'X-XSS-Protection',
+        value: '1; mode=block'
+      },
+      {
+        key: 'Permissions-Policy',
+        value: 'camera=(), microphone=(), location=(), payment=()'
+      },
+    ];
+
+    // Add CSP header
+    if (config.security.headers.contentSecurityPolicy) {
+      headers.push({
+        key: 'Content-Security-Policy',
+        value: config.security.headers.contentSecurityPolicy
+      });
+    }
+
+    // Add HSTS header in production
+    if (env.isProduction()) {
+      headers.push({
+        key: 'Strict-Transport-Security',
+        value: 'max-age=31536000; includeSubDomains; preload'
+      });
+    }
+
     return [
       {
         source: '/(.*)',
-        headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY'
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff'
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin'
-          },
-          // DEBUG SYSTEM: Add debug-friendly CSP in development
-          ...(process.env.NODE_ENV === 'development' ? [
-            {
-              key: 'Content-Security-Policy',
-              value: "default-src 'self' 'unsafe-eval' 'unsafe-inline'; connect-src 'self' ws: wss:;"
-            }
-          ] : [])
-        ]
+        headers
       }
     ];
   },
   
   // Redirects
   async redirects() {
-    return [
-      // Add any redirects here
-    ];
+    const redirects: Array<{ source: string; destination: string; permanent: boolean }> = [];
+
+    // Redirect to maintenance page if maintenance mode is enabled
+    if (config.features.maintenanceMode) {
+      redirects.push({
+        source: '/((?!maintenance|api|_next|static).*)',
+        destination: '/maintenance',
+        permanent: false,
+      });
+    }
+
+    return redirects;
+  },
+
+  // Rewrites for API and development features
+  async rewrites() {
+    const rewrites: Array<{ source: string; destination: string }> = [];
+
+    // Debug API endpoints - only in development
+    if (env.isDevelopment()) {
+      rewrites.push({
+        source: '/debug/:path*',
+        destination: '/api/debug/:path*',
+      });
+    }
+
+    return rewrites;
   },
   
-  // Environment variables
-  env: {
-    CUSTOM_KEY: process.env.CUSTOM_KEY,
-    // DEBUG SYSTEM: Debug control environment variables
-    CUSTOM_DEBUG_ENABLED: (process.env.NODE_ENV === 'development').toString(),
-    DEBUG_BUILD_TIME: new Date().toISOString(),
-  },
-  
-  // DEBUG SYSTEM: Compiler options for production optimization
+  // Compiler options for production optimization
   compiler: {
     // Remove console.log in production (but keep error and warn)
-    removeConsole: process.env.NODE_ENV === 'production' ? {
+    removeConsole: env.isProduction() ? {
       exclude: ['error', 'warn']
     } : false,
   },
   
   // Production optimizations
-  ...(process.env.NODE_ENV === 'production' && {
-    // 🐛 DEBUG SYSTEM: Ensure debug code is completely removed in production
+  ...(env.isProduction() && {
     eslint: {
-      // Disable ESLint during builds to speed up production builds
+      // Keep ESLint enabled during builds for quality assurance
       ignoreDuringBuilds: false,
     },
     typescript: {
-      // Disable type checking during builds if needed for speed
+      // Keep type checking enabled for production builds
       ignoreBuildErrors: false,
     },
+    // Enable source maps in production only if debug is enabled
+    productionBrowserSourceMaps: env.isDebugEnabled(),
   }),
   
   // Development-specific configurations
-  ...(process.env.NODE_ENV === 'development' && {
-    // DEBUG SYSTEM: Enable detailed webpack build info in development
-    webpack: (config, { dev, isServer }) => {
-      // Original webpack config
+  ...(env.isDevelopment() && {
+    // Webpack configuration for development
+    webpack: (webpackConfig, { dev, isServer }) => {
+      // Apply base webpack config
       if (!dev && !isServer) {
-        config.optimization.splitChunks.chunks = 'all';
+        webpackConfig.optimization.splitChunks.chunks = 'all';
       }
       
-      // DEBUG SYSTEM: Add webpack build performance tracking
-      if (dev) {
-        config.plugins = config.plugins || [];
+      // Add webpack build performance tracking
+      if (dev && config.features.debugPanel) {
+        webpackConfig.plugins = webpackConfig.plugins || [];
         
-        // Add build timing plugin for debug
         class BuildTimePlugin {
           apply(compiler: any) {
             compiler.hooks.compile.tap('BuildTimePlugin', () => {
-              console.log('🔨 [DEBUG] Webpack compilation started...');
+              console.log('[DEBUG] Webpack compilation started...');
             });
             
             compiler.hooks.done.tap('BuildTimePlugin', (stats: any) => {
               const buildTime = stats.endTime - stats.startTime;
-              console.log(`✅ [DEBUG] Webpack compilation completed in ${buildTime}ms`);
+              console.log(`[DEBUG] Webpack compilation completed in ${buildTime}ms`);
             });
           }
         }
         
-        config.plugins.push(new BuildTimePlugin());
+        webpackConfig.plugins.push(new BuildTimePlugin());
       }
       
-      return config;
+      return webpackConfig;
+    },
+    
+    // Custom build ID for development builds
+    generateBuildId: async () => {
+      return `dev-build-${new Date().toISOString()}`;
     },
   }),
   
-  // Bundle analyzer (keep your existing functionality)
+  // Bundle analyzer (when ANALYZE=true)
   ...(process.env.ANALYZE === 'true' && {
-    webpack: (config, options) => {
-      // Apply existing webpack config first
+    webpack: (webpackConfig, options) => {
+      // Apply base webpack config first
       if (!options.dev && !options.isServer) {
-        config.optimization.splitChunks.chunks = 'all';
+        webpackConfig.optimization.splitChunks.chunks = 'all';
         
         // Add debug system production alias
-        config.resolve.alias = {
-          ...config.resolve.alias,
+        webpackConfig.resolve.alias = {
+          ...webpackConfig.resolve.alias,
           '@/utils/debug': path.resolve(__dirname, 'src/utils/debug-production.ts')
         };
       }
       
-      // Then add bundle analyzer
+      // Add bundle analyzer
       const { BundleAnalyzerPlugin } = require('@next/bundle-analyzer')();
-      config.plugins.push(new BundleAnalyzerPlugin());
+      webpackConfig.plugins.push(new BundleAnalyzerPlugin());
       
-      return config;
+      return webpackConfig;
     },
   }),
+
+  // Output configuration
+  output: env.isProduction() ? 'standalone' : undefined,
   
-  // DEBUG SYSTEM: Rewrites for debug API endpoints in development
-  async rewrites() {
-    return process.env.NODE_ENV === 'development' ? [
-      // Debug API endpoints - only in development
-      {
-        source: '/debug/:path*',
-        destination: '/api/debug/:path*',
-      },
-    ] : [];
+  // Performance configuration
+  onDemandEntries: {
+    // Period (in ms) where the server will keep pages in the buffer
+    maxInactiveAge: env.isDevelopment() ? 25 * 1000 : 60 * 1000,
+    // Number of pages that should be kept simultaneously without being disposed
+    pagesBufferLength: env.isDevelopment() ? 5 : 2,
   },
-  
-  // DEBUG SYSTEM: Custom server configuration for development
-  ...(process.env.NODE_ENV === 'development' && {
-    // Enable source maps in development for better debugging
-    productionBrowserSourceMaps: false, // Keep false for production
-    // But enable them in development
-    generateBuildId: async () => {
-      return `debug-build-${new Date().toISOString()}`;
+
+  // Internationalization (if needed in future)
+  // i18n: {
+  //   locales: ['en'],
+  //   defaultLocale: 'en',
+  // },
+
+  // Custom server configuration
+  ...(env.isDevelopment() && {
+    // Development server options
+    devIndicators: {
+      buildActivity: config.features.debugPanel,
+      buildActivityPosition: 'bottom-right',
     },
   }),
 };
+
+// Log configuration in development
+if (env.isDevelopment()) {
+  console.log('📋 Next.js Configuration Summary:');
+  console.log(`  Environment: ${env.NODE_ENV}`);
+  console.log(`  Debug Mode: ${env.DEBUG}`);
+  console.log(`  Debug Panel: ${config.features.debugPanel}`);
+  console.log(`  Bundle Analyzer: ${process.env.ANALYZE === 'true'}`);
+  console.log(`  Source Maps: ${nextConfig.productionBrowserSourceMaps || false}`);
+  console.log(`  Maintenance Mode: ${config.features.maintenanceMode}`);
+}
 
 export default nextConfig;

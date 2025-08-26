@@ -7,7 +7,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Sliders, Bell, Shield, Zap } from 'lucide-react';
-import { User } from '@/types/dashboard';
+import { User } from '@/types/auth';
 import { Switch } from '@/components/ui/switch';
 import { STORAGE_KEYS } from '@/constants/dashboard';
 

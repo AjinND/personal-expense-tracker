@@ -5,7 +5,6 @@ import { dashboardService } from "@/services/dashboardService";
 import { withAuth, withSecurityHeaders, withRateLimit } from "@/lib/auth";
 import { getClientIdentifier } from "@/lib/rate-limit";
 import { 
-  DashboardError, 
   DashboardErrorCodes,
   VALIDATION_CONSTANTS,
   CreateExpenseRequest,
@@ -13,6 +12,7 @@ import {
   ExpenseQueryParams
 } from "@/types/dashboard-backend";
 import { AuthTokenPayload } from "@/types/auth-backend";
+import { DashboardError } from "@/types/dashboard";
 
 // Validation schemas
 const createExpenseSchema = z.object({

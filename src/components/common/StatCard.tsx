@@ -6,23 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { LucideIcon } from 'lucide-react';
-
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  icon?: LucideIcon;
-  description?: string;
-  trend?: {
-    value: number;
-    isPositive: boolean;
-    label?: string;
-  };
-  variant?: 'default' | 'primary' | 'success' | 'warning' | 'danger';
-  loading?: boolean;
-  className?: string;
-  onClick?: () => void;
-}
+import { StatCardProps } from '@/types/layout';
 
 const variantStyles = {
   default: {

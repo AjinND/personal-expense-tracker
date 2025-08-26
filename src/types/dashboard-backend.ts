@@ -93,27 +93,6 @@ export interface DashboardResponse<T = any> {
   };
 }
 
-export class DashboardError extends Error {
-  public readonly code: string;
-  public readonly statusCode: number;
-  public readonly isOperational: boolean;
-
-  constructor(
-    message: string,
-    code: string = 'DASHBOARD_ERROR',
-    statusCode: number = 400,
-    isOperational: boolean = true
-  ) {
-    super(message);
-    this.name = 'DashboardError';
-    this.code = code;
-    this.statusCode = statusCode;
-    this.isOperational = isOperational;
-
-    Error.captureStackTrace(this, this.constructor);
-  }
-}
-
 export enum DashboardErrorCodes {
   INVALID_DATE = 'INVALID_DATE',
   INVALID_AMOUNT = 'INVALID_AMOUNT',
