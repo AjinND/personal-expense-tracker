@@ -8,21 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { checkPasswordStrength } from '@/lib/auth-validation';
 import { cn } from '@/lib/utils';
-
-interface PasswordInputProps {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  onBlur?: () => void;
-  error?: string;
-  disabled?: boolean;
-  placeholder?: string;
-  autoComplete?: string;
-  required?: boolean;
-  showStrength?: boolean;
-  className?: string;
-}
+import { PasswordInputProps } from '@/types/components';
 
 export const PasswordInput: React.FC<PasswordInputProps> = ({
   id,

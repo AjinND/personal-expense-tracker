@@ -14,18 +14,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { AlertTriangle, Info, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-interface ConfirmDialogProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => void | Promise<void>;
-  title: string;
-  description: string;
-  confirmText?: string;
-  cancelText?: string;
-  variant?: 'default' | 'destructive' | 'warning';
-  isLoading?: boolean;
-}
+import { ConfirmDialogProps } from '@/types/components';
 
 const variantConfig = {
   default: {

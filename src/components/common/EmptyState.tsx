@@ -4,24 +4,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { LucideIcon } from 'lucide-react';
-
-interface EmptyStateProps {
-  icon?: LucideIcon | React.ComponentType<any>;
-  title: string;
-  description?: string;
-  action?: {
-    label: string;
-    onClick: () => void;
-    variant?: 'default' | 'outline' | 'secondary';
-  };
-  secondaryAction?: {
-    label: string;
-    onClick: () => void;
-  };
-  className?: string;
-  iconClassName?: string;
-}
+import { EmptyStateProps } from '@/types/components';
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
   icon: Icon,

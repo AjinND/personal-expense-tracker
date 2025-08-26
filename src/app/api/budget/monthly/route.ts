@@ -5,11 +5,11 @@ import { dashboardService } from "@/services/dashboardService";
 import { withAuth, withSecurityHeaders, withRateLimit } from "@/lib/auth";
 import { getClientIdentifier } from "@/lib/rate-limit";
 import { 
-  DashboardError,
   VALIDATION_CONSTANTS,
   BudgetRequest
 } from "@/types/dashboard-backend";
 import { AuthTokenPayload } from "@/types/auth-backend";
+import { DashboardError } from "@/types/dashboard";
 
 // Validation schema for budget updates
 const budgetSchema = z.object({

@@ -5,14 +5,7 @@ import React from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-interface LoadingStateProps {
-  variant?: 'spinner' | 'skeleton' | 'dots';
-  size?: 'sm' | 'md' | 'lg';
-  text?: string;
-  className?: string;
-  count?: number; // For skeleton variant
-}
+import { LoadingStateProps } from '@/types/layout';
 
 export const LoadingState: React.FC<LoadingStateProps> = ({
   variant = 'spinner',

@@ -14,7 +14,7 @@ import {
   STORAGE_KEYS,
 } from '@/constants/dashboard';
 import { dashboardApiFallback } from './dashboard-api-fallback';
-import { debug } from '@/utils/debug-client'; // Import centralized debug
+import { debug } from '@/utils/debug'; // Import centralized debug
 
 // Retry configuration
 const RETRY_CONFIG = {
@@ -768,7 +768,6 @@ class DashboardApiService {
       );
     }
   }
-
   // Batch operations
   async batchAddExpenses(expenses: ExpenseCreateRequest[]): Promise<ExpenseEntry[]> {
     try {

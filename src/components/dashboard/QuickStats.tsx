@@ -16,19 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/dashboard-utils';
-
-interface QuickStatsProps {
-  totalExpenses: number;
-  monthlyBudget: number;
-  topCategory: {
-    name: string;
-    amount: number;
-    icon: React.ComponentType<any>;
-  };
-  monthlyChange: number;
-  loading?: boolean;
-  className?: string;
-}
+import { QuickStatsProps } from '@/types/components';
 
 interface StatCardProps {
   title: string;

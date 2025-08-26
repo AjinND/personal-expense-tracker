@@ -1,37 +1,37 @@
 // src/components/layout/DashboardLayout.tsx
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { 
-  Menu, 
-  X, 
-  BarChart3, 
-  CreditCard, 
-  PieChart, 
-  Target, 
-  FileText, 
+import React, { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Menu,
+  X,
+  BarChart3,
+  CreditCard,
+  PieChart,
+  Target,
+  FileText,
   Settings,
   HelpCircle,
   User,
   LogOut,
-  ChevronDown
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+  ChevronDown,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from "@/components/ui/dropdown-menu";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
-  user: { 
-    name: string; 
+  user: {
+    name: string;
     email?: string;
     avatar?: string;
   };
@@ -42,47 +42,46 @@ interface DashboardLayoutProps {
 // Unified navigation items
 const navigationItems = [
   {
-    label: 'Dashboard',
-    href: '/dashboard',
+    label: "Dashboard",
+    href: "/dashboard",
     icon: BarChart3,
-    description: 'Overview & insights'
+    description: "Overview & insights",
   },
   {
-    label: 'Expenses',
-    href: '/expenses',
+    label: "Expenses",
+    href: "/expenses",
     icon: CreditCard,
-    description: 'Track spending'
+    description: "Track spending",
   },
   {
-    label: 'Budget',
-    href: '/budget',
+    label: "Budget",
+    href: "/budget",
     icon: Target,
-    description: 'Plan & manage'
+    description: "Plan & manage",
   },
   {
-    label: 'Analytics',
-    href: '/analytics',
+    label: "Analytics",
+    href: "/analytics",
     icon: PieChart,
-    description: 'Detailed reports'
+    description: "Detailed reports",
   },
   {
-    label: 'Reports',
-    href: '/reports',
+    label: "Reports",
+    href: "/reports",
     icon: FileText,
-    description: 'Export data'
-  }
+    description: "Export data",
+  },
 ];
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   children,
   user,
   onLogout,
-  className
+  className,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const pathname = usePathname();
-  const router = useRouter();
 
   // Check if mobile
   useEffect(() => {
@@ -95,8 +94,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     };
 
     checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
   // Close mobile menu on route change
@@ -105,17 +104,25 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   }, [pathname]);
 
   const getCurrentPageInfo = () => {
-    const currentItem = navigationItems.find(item => pathname.startsWith(item.href));
-    return currentItem || { label: 'Dashboard', icon: BarChart3 };
+    const currentItem = navigationItems.find((item) =>
+      pathname.startsWith(item.href)
+    );
+    return (
+      currentItem || {
+        label: "Dashboard",
+        icon: BarChart3,
+        description: "Overview & insights",
+      }
+    );
   };
 
   const currentPage = getCurrentPageInfo();
 
   const getUserInitials = (name: string) => {
     return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
       .toUpperCase()
       .slice(0, 2);
   };
@@ -126,7 +133,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            
             {/* Left side - Logo and Mobile Menu */}
             <div className="flex items-center space-x-4">
               {/* Mobile menu button */}
@@ -136,7 +142,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className="md:hidden"
               >
-                {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                {isMobileMenuOpen ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <Menu className="h-5 w-5" />
+                )}
               </Button>
 
               {/* Logo */}
@@ -152,7 +162,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               {/* Current page indicator for mobile */}
               <div className="md:hidden flex items-center text-gray-600">
                 <span className="text-sm">•</span>
-                <span className="ml-2 text-sm font-medium">{currentPage.label}</span>
+                <span className="ml-2 text-sm font-medium">
+                  {currentPage.label}
+                </span>
               </div>
             </div>
 
@@ -161,7 +173,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               {navigationItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname.startsWith(item.href);
-                
+
                 return (
                   <Link
                     key={item.href}
@@ -184,50 +196,59 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             <div className="flex items-center space-x-3">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center space-x-2 hover:bg-gray-100">
+                  <Button
+                    variant="ghost"
+                    className="flex items-center space-x-2 hover:bg-gray-100"
+                  >
                     <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
                       {getUserInitials(user.name)}
                     </div>
                     <div className="hidden sm:block text-left">
-                      <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {user.name}
+                      </div>
                       <div className="text-xs text-gray-500">
-                        {user.email || 'user@example.com'}
+                        {user.email || "user@example.com"}
                       </div>
                     </div>
                     <ChevronDown className="h-4 w-4 text-gray-500" />
                   </Button>
                 </DropdownMenuTrigger>
-                
+
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="px-3 py-2 sm:hidden">
-                    <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                    <div className="text-xs text-gray-500">{user.email || 'user@example.com'}</div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {user.name}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {user.email || "user@example.com"}
+                    </div>
                   </div>
                   <DropdownMenuSeparator className="sm:hidden" />
-                  
+
                   <DropdownMenuItem asChild>
                     <Link href="/profile" className="flex items-center">
                       <User className="mr-2 h-4 w-4" />
                       Profile
                     </Link>
                   </DropdownMenuItem>
-                  
+
                   <DropdownMenuItem asChild>
                     <Link href="/settings" className="flex items-center">
                       <Settings className="mr-2 h-4 w-4" />
                       Settings
                     </Link>
                   </DropdownMenuItem>
-                  
+
                   <DropdownMenuItem asChild>
                     <Link href="/help" className="flex items-center">
                       <HelpCircle className="mr-2 h-4 w-4" />
                       Help & Support
                     </Link>
                   </DropdownMenuItem>
-                  
+
                   <DropdownMenuSeparator />
-                  
+
                   <DropdownMenuItem
                     onClick={onLogout}
                     className="text-red-600 focus:text-red-600 focus:bg-red-50"
@@ -248,7 +269,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               {navigationItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname.startsWith(item.href);
-                
+
                 return (
                   <Link
                     key={item.href}
@@ -264,12 +285,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                     <Icon className="h-5 w-5" />
                     <div>
                       <div className="text-sm font-medium">{item.label}</div>
-                      <div className="text-xs text-gray-500">{item.description}</div>
+                      <div className="text-xs text-gray-500">
+                        {item.description}
+                      </div>
                     </div>
                   </Link>
                 );
               })}
-              
+
               {/* Quick actions in mobile menu */}
               <div className="pt-3 mt-3 border-t border-gray-200">
                 <Link
@@ -280,7 +303,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                   <Settings className="h-5 w-5" />
                   <div className="text-sm font-medium">Settings</div>
                 </Link>
-                
+
                 <Link
                   href="/help"
                   onClick={() => setIsMobileMenuOpen(false)}
@@ -303,8 +326,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             <div className="flex items-center space-x-3">
               <currentPage.icon className="h-6 w-6 text-blue-600" />
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{currentPage.label}</h1>
-                <p className="text-sm text-gray-600">{currentPage.description}</p>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {currentPage.label}
+                </h1>
+                <p className="text-sm text-gray-600">
+                  {currentPage.description}
+                </p>
               </div>
             </div>
           </div>
@@ -312,16 +339,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
         {/* Page Content */}
         <div className="px-4 sm:px-6 lg:px-8 py-6">
-          <div className="max-w-7xl mx-auto">
-            {children}
-          </div>
+          <div className="max-w-7xl mx-auto">{children}</div>
         </div>
       </main>
 
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-25 z-30 md:hidden" 
+        <div
+          className="fixed inset-0 bg-black bg-opacity-25 z-30 md:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
@@ -332,32 +357,31 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           {navigationItems.slice(0, 4).map((item) => {
             const Icon = item.icon;
             const isActive = pathname.startsWith(item.href);
-            
+
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
                   "flex flex-col items-center justify-center p-1 transition-colors",
-                  isActive
-                    ? "text-blue-600"
-                    : "text-gray-500"
+                  isActive ? "text-blue-600" : "text-gray-500"
                 )}
               >
-                <Icon className={cn(
-                  "h-5 w-5 mb-1",
-                  isActive && "text-blue-600"
-                )} />
-                <span className={cn(
-                  "text-xs font-medium",
-                  isActive && "text-blue-600"
-                )}>
+                <Icon
+                  className={cn("h-5 w-5 mb-1", isActive && "text-blue-600")}
+                />
+                <span
+                  className={cn(
+                    "text-xs font-medium",
+                    isActive && "text-blue-600"
+                  )}
+                >
                   {item.label}
                 </span>
               </Link>
             );
           })}
-          
+
           {/* More button for additional options */}
           <button
             onClick={() => setIsMobileMenuOpen(true)}

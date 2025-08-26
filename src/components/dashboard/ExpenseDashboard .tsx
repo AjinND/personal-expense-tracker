@@ -10,7 +10,7 @@ import { CategoryCards } from './CategoryCards';
 import { DashboardCharts } from './DashboardCharts';
 import { RecentTransactions } from './RecentTransactions';
 import { DashboardLayoutConfig, useDashboardConfig } from './DashboardLayoutConfig';
-import { User } from '@/types/dashboard';
+import { User } from '@/types/auth';
 import { cn } from '@/lib/utils';
 import { 
   calculateMonthlyChange, 

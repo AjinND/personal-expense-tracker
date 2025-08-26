@@ -1,6 +1,9 @@
 // src/types/components.ts
 import { ReactNode } from 'react';
-import { User, DashboardMetrics, ExpenseEntry, CategoryTotals, ExpenseCategory } from './dashboard';
+import { DashboardMetrics, ExpenseCategory } from './dashboard';
+import { User } from './auth';
+import { LucideIcon } from 'lucide-react';
+import { DateRange } from 'react-day-picker';
 
 // Dashboard Component Props
 export interface ExpenseDashboardProps {
@@ -9,35 +12,17 @@ export interface ExpenseDashboardProps {
   className?: string;
 }
 
-export interface DashboardHeaderProps {
-  user: User;
-  onRefresh: () => Promise<void>;
-  refreshing: boolean;
-  error: string | null;
-  onRetry: () => Promise<void>;
-}
-
 export interface ExpenseSummaryProps {
   metrics: DashboardMetrics;
   totalBalance: number;
   onBudgetUpdate: (budget: number) => Promise<void>;
   loading?: boolean;
-  className?: string;
-}
-
-export interface CategoryCardsProps {
-  categoryTotals: CategoryTotals;
-  onAddExpense: (category: ExpenseCategory, amount: number, date: string) => Promise<void>;
-  loading?: boolean;
-  className?: string;
-}
-
-export interface DashboardChartsProps {
-  expenses: ExpenseEntry[];
-  categoryTotals: CategoryTotals;
-  dateRange: any; // DateRange from react-day-picker
-  onDateRangeChange: (range: any) => void;
-  loading?: boolean;
+  monthlyChange?: number;
+  topCategory?: {
+    name: string;
+    amount: number;
+    icon: React.ElementType;
+  };
   className?: string;
 }
 
@@ -78,22 +63,32 @@ export interface LoadingSpinnerProps {
 }
 
 export interface EmptyStateProps {
-  icon?: ReactNode;
+  icon?: LucideIcon | React.ComponentType<any>;
   title: string;
   description?: string;
-  action?: ReactNode;
+  action?: {
+    label: string;
+    onClick: () => void;
+    variant?: 'default' | 'outline' | 'secondary';
+  };
+  secondaryAction?: {
+    label: string;
+    onClick: () => void;
+  };
   className?: string;
+  iconClassName?: string;
 }
 
 export interface ConfirmDialogProps {
   isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void | Promise<void>;
   title: string;
   description: string;
   confirmText?: string;
   cancelText?: string;
-  variant?: 'default' | 'destructive';
+  variant?: 'default' | 'destructive' | 'warning';
+  isLoading?: boolean;
 }
 
 // Error Component Props
@@ -233,5 +228,57 @@ export interface DataTableProps<T> {
     icon?: ReactNode;
     variant?: 'default' | 'destructive';
   }>;
+  className?: string;
+}
+
+export interface FormInputProps {
+  id: string;
+  label: string;
+  type?: string;
+  value: string;
+  onChange: (value: string) => void;
+  onBlur?: () => void;
+  error?: string;
+  disabled?: boolean;
+  placeholder?: string;
+  icon?: LucideIcon;
+  autoComplete?: string;
+  required?: boolean;
+  className?: string;
+}
+
+export interface PasswordInputProps {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  onBlur?: () => void;
+  error?: string;
+  disabled?: boolean;
+  placeholder?: string;
+  autoComplete?: string;
+  required?: boolean;
+  showStrength?: boolean;
+  className?: string;
+}
+
+export interface DateRangePickerProps {
+  value?: DateRange;
+  onChange: (range: DateRange | undefined) => void;
+  className?: string;
+  align?: 'start' | 'center' | 'end';
+  showPresets?: boolean;
+}
+
+export interface QuickStatsProps {
+  totalExpenses: number;
+  monthlyBudget: number;
+  topCategory: {
+    name: string;
+    amount: number;
+    icon: React.ComponentType<any>;
+  };
+  monthlyChange: number;
+  loading?: boolean;
   className?: string;
 }

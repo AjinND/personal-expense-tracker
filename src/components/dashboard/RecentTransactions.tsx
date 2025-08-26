@@ -17,16 +17,9 @@ import {
   Music
 } from 'lucide-react';
 import Link from 'next/link';
-import { ExpenseEntry, ExpenseCategory } from '@/types/dashboard';
+import { ExpenseEntry, ExpenseCategory, RecentTransactionsProps } from '@/types/dashboard';
 import { formatCurrency } from '@/lib/dashboard-utils';
 import { cn } from '@/lib/utils';
-
-interface RecentTransactionsProps {
-  expenses: ExpenseEntry[];
-  loading?: boolean;
-  limit?: number;
-  className?: string;
-}
 
 const getCategoryIcon = (category: ExpenseCategory) => {
   switch (category) {

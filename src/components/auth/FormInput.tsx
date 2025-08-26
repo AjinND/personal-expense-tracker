@@ -6,22 +6,7 @@ import { Eye, EyeOff, AlertCircle, LucideIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
-
-interface FormInputProps {
-  id: string;
-  label: string;
-  type?: string;
-  value: string;
-  onChange: (value: string) => void;
-  onBlur?: () => void;
-  error?: string;
-  disabled?: boolean;
-  placeholder?: string;
-  icon?: LucideIcon;
-  autoComplete?: string;
-  required?: boolean;
-  className?: string;
-}
+import { FormInputProps } from '@/types/components';
 
 export const FormInput: React.FC<FormInputProps> = ({
   id,

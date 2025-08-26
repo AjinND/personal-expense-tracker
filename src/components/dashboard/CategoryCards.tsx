@@ -21,6 +21,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import EnhancedDatePicker from "@/components/ui/enhanced-date-picker";
 import { 
+  CategoryCardsProps,
   CategoryTotals, 
   ExpenseCategory 
 } from "@/types/dashboard";
@@ -35,13 +36,6 @@ import {
   validateExpenseDate 
 } from "@/lib/dashboard-utils";
 import { cn } from "@/lib/utils";
-
-interface CategoryCardsProps {
-  categoryTotals: CategoryTotals;
-  onAddExpense: (category: ExpenseCategory, amount: number, date: string) => Promise<void>;
-  loading?: boolean;
-  className?: string;
-}
 
 const CATEGORY_ICONS: Record<ExpenseCategory, React.ElementType> = {
   food: Utensils,
