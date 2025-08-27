@@ -14,6 +14,7 @@ interface IUserMethods {
   isLocked(): boolean;
   sanitizeForResponse(): {
     id: string;
+    avatar: string;
     name: string;
     email: string;
     monthlyBudget: number;
@@ -32,6 +33,18 @@ type UserDocument = HydratedDocument<IUser, IUserMethods>;
 
 const UserSchema = new Schema<IUser, UserModel, IUserMethods>(
   {
+    avatar: {
+      type: String,
+      default: undefined,
+      validate: {
+        validator: function(v: string) {
+          if (!v) return true; // Allow empty values
+          // Validate URL format for avatar
+          return /^\/uploads\/avatars\/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|gif)$/i.test(v);
+        },
+        message: 'Invalid avatar URL format'
+      }
+    },
     name: {
       type: String,
       required: [true, 'Name is required'],
@@ -191,6 +204,7 @@ UserSchema.methods.isLocked = function(this: UserDocument): boolean {
 // Instance method to sanitize user for response
 UserSchema.methods.sanitizeForResponse = function(this: UserDocument): {
   id: string;
+  avatar: string;
   name: string;
   email: string;
   monthlyBudget: number;
@@ -201,6 +215,7 @@ UserSchema.methods.sanitizeForResponse = function(this: UserDocument): {
 } {
   return {
     id: this._id.toString(),
+    avatar: this.avatar || '',
     name: this.name,
     email: this.email,
     monthlyBudget: this.monthlyBudget,

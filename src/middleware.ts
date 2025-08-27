@@ -23,6 +23,7 @@ const CSP_POLICY = process.env.NODE_ENV === 'production'
 const RATE_LIMITS = {
   '/api/auth': { requests: 5, window: 15 * 60 * 1000 }, // 5 requests per 15 minutes
   '/api/auth/session': { requests: 20, window: 15 * 60 * 1000 }, // Increased to 20 for session checks
+  '/api/profile/photo': { requests: 10, window: 60 * 60 * 1000 }, // 10 requests per hour
   '/api/expenses': { requests: 200, window: 60 * 1000 }, // Increased to 200 requests per minute
   '/api/budget': { requests: 100, window: 60 * 1000 }, // Increased to 100 requests per minute
   '/api/dashboard': { requests: 200, window: 60 * 1000 }, // Increased to 200 requests per minute
@@ -85,6 +86,12 @@ export function middleware(request: NextRequest) {
     pathname.includes('.') ||
     pathname === '/favicon.ico'
   ) {
+    return NextResponse.next();
+  }
+
+  // Handle file upload routes with larger body size
+  if (pathname === '/api/profile/photo') {
+    // Skip body size validation for file uploads
     return NextResponse.next();
   }
 

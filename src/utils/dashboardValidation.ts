@@ -1,8 +1,8 @@
 // src/utils/dashboardValidation.ts
+import { DashboardError } from '@/types/dashboard';
 import { 
   ExpenseCategory, 
   VALIDATION_CONSTANTS,
-  DashboardError,
   DashboardErrorCodes 
 } from '@/types/dashboard-backend';
 

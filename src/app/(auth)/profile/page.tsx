@@ -52,6 +52,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { checkPasswordStrength } from '@/lib/auth-validation';
 import { useProfileApi } from '@/hooks/useProfileApi';
 import { ActivityLog } from '@/types/profile';
+import { ProfilePhotoUpload } from '@/components/profile/ProfilePhotoUpload';
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuth();
@@ -134,6 +135,8 @@ export default function ProfilePage() {
       email_verified: 'Verified email',
       email_verification_requested: 'Requested email verification',
       profile_updated: 'Updated profile',
+      profile_photo_updated: 'Updated profile photo', // If you updated ActivityLog enum
+      profile_photo_removed: 'Removed profile photo', // If you updated ActivityLog enum
       account_deleted: 'Deleted account',
       account_deletion_failed: 'Failed account deletion',
       budget_updated: 'Updated budget',
@@ -319,21 +322,18 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Avatar Section */}
-              <div className="flex items-center space-x-4">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="bg-blue-600 text-white text-xl">
-                    {getInitials(user.name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <Button variant="outline" size="sm">
-                    <Camera className="h-4 w-4 mr-2" />
-                    Change Photo
-                  </Button>
-                  <p className="text-sm text-gray-500 mt-1">JPG or PNG. Max size 2MB.</p>
-                </div>
-              </div>
+              <ProfilePhotoUpload
+                currentPhotoUrl={user.avatar}
+                userName={user.name}
+                onPhotoUpdate={async (photoUrl) => {
+                  updateUser({ ...user, avatar: photoUrl });
+                  // Reload activities to show photo upload (same pattern as password change)
+                  setActivityPage(1);
+                  await loadActivities();
+                }}
+                maxSizeBytes={2 * 1024 * 1024} // 2MB
+                acceptedFormats={['image/jpeg', 'image/png', 'image/gif']}
+              />
 
               {/* Profile Form */}
               <div className="space-y-4">

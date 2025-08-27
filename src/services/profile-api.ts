@@ -50,7 +50,6 @@ export const profileApi = {
       throw error.response?.data || { error: 'Failed to change password' };
     }
   },
-
   // Email verification
   sendVerificationEmail: async (): Promise<ApiResponse> => {
     try {
@@ -60,7 +59,6 @@ export const profileApi = {
       throw error.response?.data || { error: 'Failed to send verification email' };
     }
   },
-
   // Confirm email verification
   confirmEmailVerification: async (token: string): Promise<ApiResponse> => {
     try {
@@ -70,7 +68,6 @@ export const profileApi = {
       throw error.response?.data || { error: 'Failed to verify email' };
     }
   },
-
   // Delete account
   deleteAccount: async (password: string, confirmation: string): Promise<ApiResponse> => {
     try {
@@ -82,7 +79,6 @@ export const profileApi = {
       throw error.response?.data || { error: 'Failed to delete account' };
     }
   },
-
   // Get activity logs
   getActivityLogs: async (page: number = 1, limit: number = 20): Promise<ActivityLogResponse> => {
     try {
@@ -94,14 +90,54 @@ export const profileApi = {
       throw error.response?.data || { error: 'Failed to fetch activity logs' };
     }
   },
-
   // Update profile
-  updateProfile: async (data: { name?: string; email?: string; monthlyBudget?: number }): Promise<ApiResponse> => {
+  updateProfile: async (data: { 
+    name?: string; 
+    email?: string; 
+    monthlyBudget?: number;
+    avatar?: string;
+  }): Promise<ApiResponse> => {
     try {
       const response = await apiClient.put('/profile', data);
       return response.data;
     } catch (error: any) {
       throw error.response?.data || { error: 'Failed to update profile' };
+    }
+  },
+  // Upload profile photo
+  uploadPhoto: async (file: File): Promise<ApiResponse & { photoUrl?: string }> => {
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+
+      const response = await fetch('/api/profile/photo', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN)}`,
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Upload failed');
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      throw {
+        success: false,
+        error: error.message || 'Failed to upload photo'
+      };
+    }
+  },
+  // Remove profile photo
+  removePhoto: async (): Promise<ApiResponse> => {
+    try {
+      const response = await apiClient.delete('/profile/photo');
+      return response.data;
+    } catch (error: any) {
+      throw error.response?.data || { error: 'Failed to remove photo' };
     }
   },
 };

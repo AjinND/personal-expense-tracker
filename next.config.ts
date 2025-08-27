@@ -9,29 +9,39 @@ const nextConfig: NextConfig = {
     // Server components optimization
     serverComponentsExternalPackages: ['mongoose'],
   },
-  
+
+  images: {
+    domains: [
+      'localhost',
+      // Add your production domain here
+      // 'yourdomain.com'
+    ],
+    formats: ['image/webp', 'image/avif'],
+    // Local images configuration
+    unoptimized: process.env.NODE_ENV === 'development',
+  },
+  // Configure API body size limits
+  serverRuntimeConfig: {
+    // Increase body size limit for file uploads
+    maxFileSize: '2mb',
+  },
+
   // Webpack configuration
   webpack: (webpackConfig, { dev, isServer }) => {
     // Optimize bundle size
     if (!dev && !isServer) {
       webpackConfig.optimization.splitChunks.chunks = 'all';
-      
+
       // Replace debug calls with no-ops in production
       webpackConfig.resolve.alias = {
         ...webpackConfig.resolve.alias,
         '@/utils/debug': path.resolve(__dirname, 'src/utils/debug-production.ts')
       };
     }
-    
+
     return webpackConfig;
   },
-  
-  // Image optimization
-  images: {
-    domains: [],
-    formats: ['image/webp', 'image/avif'],
-  },
-  
+
   // Environment variables to expose to client
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
@@ -40,7 +50,7 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_DEBUG: env.DEBUG.toString(),
     DEBUG_BUILD_TIME: new Date().toISOString(),
   },
-  
+
   // Security headers
   async headers() {
     const headers = [
@@ -63,6 +73,10 @@ const nextConfig: NextConfig = {
       {
         key: 'Permissions-Policy',
         value: 'camera=(), microphone=(), location=(), payment=()'
+      },
+      {
+        key: 'Cache-Control',
+        value: 'public, max-age=31536000, immutable',
       },
     ];
 
@@ -89,7 +103,7 @@ const nextConfig: NextConfig = {
       }
     ];
   },
-  
+
   // Redirects
   async redirects() {
     const redirects: Array<{ source: string; destination: string; permanent: boolean }> = [];
@@ -120,7 +134,7 @@ const nextConfig: NextConfig = {
 
     return rewrites;
   },
-  
+
   // Compiler options for production optimization
   compiler: {
     // Remove console.log in production (but keep error and warn)
@@ -128,7 +142,7 @@ const nextConfig: NextConfig = {
       exclude: ['error', 'warn']
     } : false,
   },
-  
+
   // Production optimizations
   ...(env.isProduction() && {
     eslint: {
@@ -142,7 +156,7 @@ const nextConfig: NextConfig = {
     // Enable source maps in production only if debug is enabled
     productionBrowserSourceMaps: env.isDebugEnabled(),
   }),
-  
+
   // Development-specific configurations
   ...(env.isDevelopment() && {
     // Webpack configuration for development
@@ -151,61 +165,61 @@ const nextConfig: NextConfig = {
       if (!dev && !isServer) {
         webpackConfig.optimization.splitChunks.chunks = 'all';
       }
-      
+
       // Add webpack build performance tracking
       if (dev && config.features.debugPanel) {
         webpackConfig.plugins = webpackConfig.plugins || [];
-        
+
         class BuildTimePlugin {
           apply(compiler: any) {
             compiler.hooks.compile.tap('BuildTimePlugin', () => {
               console.log('[DEBUG] Webpack compilation started...');
             });
-            
+
             compiler.hooks.done.tap('BuildTimePlugin', (stats: any) => {
               const buildTime = stats.endTime - stats.startTime;
               console.log(`[DEBUG] Webpack compilation completed in ${buildTime}ms`);
             });
           }
         }
-        
+
         webpackConfig.plugins.push(new BuildTimePlugin());
       }
-      
+
       return webpackConfig;
     },
-    
+
     // Custom build ID for development builds
     generateBuildId: async () => {
       return `dev-build-${new Date().toISOString()}`;
     },
   }),
-  
+
   // Bundle analyzer (when ANALYZE=true)
   ...(process.env.ANALYZE === 'true' && {
     webpack: (webpackConfig, options) => {
       // Apply base webpack config first
       if (!options.dev && !options.isServer) {
         webpackConfig.optimization.splitChunks.chunks = 'all';
-        
+
         // Add debug system production alias
         webpackConfig.resolve.alias = {
           ...webpackConfig.resolve.alias,
           '@/utils/debug': path.resolve(__dirname, 'src/utils/debug-production.ts')
         };
       }
-      
+
       // Add bundle analyzer
       const { BundleAnalyzerPlugin } = require('@next/bundle-analyzer')();
       webpackConfig.plugins.push(new BundleAnalyzerPlugin());
-      
+
       return webpackConfig;
     },
   }),
 
   // Output configuration
   output: env.isProduction() ? 'standalone' : undefined,
-  
+
   // Performance configuration
   onDemandEntries: {
     // Period (in ms) where the server will keep pages in the buffer

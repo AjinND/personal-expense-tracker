@@ -29,6 +29,8 @@ const ActivityLogSchema = new Schema<IActivityLog>({
       'email_verified',
       'email_verification_requested',
       'profile_updated',
+      'profile_photo_updated',
+      'profile_photo_removed',
       'account_deleted',
       'account_deletion_failed',
       'budget_updated',
