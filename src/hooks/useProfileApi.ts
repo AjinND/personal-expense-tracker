@@ -48,6 +48,12 @@ export const useProfileApi = () => {
     getActivityLogs: (page?: number, limit?: number) => 
       executeApiCall(() => profileApi.getActivityLogs(page, limit)),
     
+    uploadPhoto: (file: File) => 
+      executeApiCall(() => profileApi.uploadPhoto(file), "Profile photo updated successfully"),
+    
+    removePhoto: () => 
+      executeApiCall(() => profileApi.removePhoto(), "Profile photo removed successfully"),
+    
     updateProfile: (data: Parameters<typeof profileApi.updateProfile>[0]) => 
       executeApiCall(() => profileApi.updateProfile(data), "Profile updated successfully"),
   };
