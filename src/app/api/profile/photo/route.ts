@@ -1,56 +1,53 @@
-// src/app/api/profile/photo/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 import { verifyTokenFromRequest } from "@/lib/auth";
 import dbConnect from "@/lib/db";
 import User from "@/models/SecureUser";
 import { ActivityLog } from "@/models/ActivityLog";
+import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary";
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif'];
-const MAX_SIZE = 2 * 1024 * 1024; // 2MB
-const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'avatars');
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const MAX_SIZE = 5 * 1024 * 1024; // Increased to 5MB for better quality
 
-// Ensure upload directory exists
-async function ensureUploadDir() {
-  try {
-    await mkdir(UPLOAD_DIR, { recursive: true });
-  } catch (error) {
-    console.error('Failed to create upload directory:', error);
-  }
+// Add CORS headers helper
+function setCorsHeaders(response: NextResponse) {
+  response.headers.set('Access-Control-Allow-Origin', '*');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  return response;
 }
 
-// Generate unique filename
-function generateFileName(originalName: string, userId: string): string {
-  const ext = path.extname(originalName);
-  const timestamp = Date.now();
-  return `avatar_${userId}_${timestamp}${ext}`;
-}
-
-// Validate image file
 function validateFile(file: File): string | null {
   if (!ALLOWED_TYPES.includes(file.type)) {
-    return 'Invalid file type. Only JPG, PNG, and GIF are allowed.';
+    return `Invalid file type. Only ${ALLOWED_TYPES.join(', ')} are allowed.`;
   }
   
   if (file.size > MAX_SIZE) {
-    return 'File size must be less than 2MB.';
+    return `File size must be less than ${Math.round(MAX_SIZE / (1024 * 1024))}MB`;
   }
   
   return null;
 }
 
+// Handle OPTIONS requests for CORS
+export async function OPTIONS(request: NextRequest) {
+  return setCorsHeaders(new NextResponse(null, { status: 200 }));
+}
+
 export async function POST(request: NextRequest) {
   try {
+    console.log('🔄 Profile photo upload started');
+    
     // Verify authentication
     const tokenPayload = await verifyTokenFromRequest(request);
     const userId = tokenPayload.id;
     
     if (!userId) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
       );
+      return setCorsHeaders(response);
     }
 
     // Parse form data
@@ -58,19 +55,23 @@ export async function POST(request: NextRequest) {
     const file = formData.get('photo') as File;
 
     if (!file) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { success: false, error: "No file provided" },
         { status: 400 }
       );
+      return setCorsHeaders(response);
     }
+
+    console.log('📁 File received:', { name: file.name, type: file.type, size: file.size });
 
     // Validate file
     const validationError = validateFile(file);
     if (validationError) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { success: false, error: validationError },
         { status: 400 }
       );
+      return setCorsHeaders(response);
     }
 
     // Connect to database
@@ -79,62 +80,91 @@ export async function POST(request: NextRequest) {
     // Get user
     const user = await User.findById(userId);
     if (!user || !user.isActive) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { success: false, error: "User not found" },
         { status: 404 }
       );
+      return setCorsHeaders(response);
     }
-
-    // Ensure upload directory exists
-    await ensureUploadDir();
-
-    // Generate filename and save file
-    const fileName = generateFileName(file.name, userId);
-    const filePath = path.join(UPLOAD_DIR, fileName);
-    const fileUrl = `/uploads/avatars/${fileName}`;
 
     try {
+      // Convert file to buffer for Cloudinary
+      console.log('🔄 Converting file to buffer...');
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
-      await writeFile(filePath, buffer);
-    } catch (error) {
-      console.error('File save error:', error);
-      return NextResponse.json(
-        { success: false, error: "Failed to save file" },
+      
+      // Generate unique filename
+      const timestamp = Date.now();
+      const fileExt = file.type.split('/')[1];
+      const fileName = `avatar_${userId}_${timestamp}`;
+      
+      console.log('☁️ Uploading to Cloudinary...');
+      
+      // Upload to Cloudinary
+      const cloudinaryUrl = await uploadToCloudinary(buffer, fileName, file.type);
+      
+      console.log('✅ Cloudinary upload successful:', cloudinaryUrl);
+
+      // Delete old avatar from Cloudinary if exists
+      if (user.avatar && user.avatar.includes('cloudinary.com')) {
+        console.log('🗑️ Deleting old avatar from Cloudinary...');
+        await deleteFromCloudinary(user.avatar);
+      }
+
+      // Update user avatar in database
+      user.avatar = cloudinaryUrl;
+      await user.save();
+
+      console.log('💾 Database updated successfully');
+
+      // Log activity
+      await ActivityLog.create({
+        userId: userId,
+        action: 'profile_photo_updated',
+        details: { 
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          storage: 'cloudinary',
+          url: cloudinaryUrl
+        },
+        ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
+        userAgent: request.headers.get('user-agent'),
+      });
+
+      const response = NextResponse.json({
+        success: true,
+        message: "Profile photo updated successfully",
+        photoUrl: cloudinaryUrl,
+        user: user.sanitizeForResponse()
+      });
+
+      return setCorsHeaders(response);
+
+    } catch (uploadError) {
+      console.error('❌ Upload error:', uploadError);
+      const response = NextResponse.json(
+        { 
+          success: false, 
+          error: "Failed to upload image to cloud storage",
+          details: process.env.NODE_ENV === 'development' ? (uploadError instanceof Error ? uploadError.message : typeof uploadError === 'string' ? uploadError : JSON.stringify(uploadError)) : undefined
+        },
         { status: 500 }
       );
+      return setCorsHeaders(response);
     }
 
-    // Update user avatar in database
-    user.avatar = fileUrl;
-    await user.save();
-
-    // Log activity
-    await ActivityLog.create({
-      userId: userId,
-      action: 'profile_photo_updated',
-      details: { 
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type
-      },
-      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
-      userAgent: request.headers.get('user-agent'),
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: "Profile photo updated successfully",
-      photoUrl: fileUrl,
-      user: user.sanitizeForResponse()
-    });
-
   } catch (error) {
-    console.error("Profile photo upload error:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to update profile photo" },
+    console.error("❌ Profile photo upload error:", error);
+    const response = NextResponse.json(
+      { 
+        success: false, 
+        error: "Failed to update profile photo",
+        details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : typeof error === 'string' ? error : JSON.stringify(error)) : undefined
+      },
       { status: 500 }
     );
+    return setCorsHeaders(response);
   }
 }
 
@@ -145,10 +175,11 @@ export async function DELETE(request: NextRequest) {
     const userId = tokenPayload.id;
     
     if (!userId) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
       );
+      return setCorsHeaders(response);
     }
 
     // Connect to database
@@ -157,43 +188,47 @@ export async function DELETE(request: NextRequest) {
     // Get user
     const user = await User.findById(userId);
     if (!user || !user.isActive) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { success: false, error: "User not found" },
         { status: 404 }
       );
+      return setCorsHeaders(response);
     }
 
-    // Remove avatar from user
     const oldAvatarUrl = user.avatar;
+    
+    // Delete from Cloudinary if it's a Cloudinary URL
+    if (oldAvatarUrl && oldAvatarUrl.includes('cloudinary.com')) {
+      await deleteFromCloudinary(oldAvatarUrl);
+    }
+    
+    // Remove avatar from user
     user.avatar = undefined;
     await user.save();
-
-    // TODO: Optionally delete the old file from filesystem
-    // if (oldAvatarUrl && oldAvatarUrl.startsWith('/uploads/')) {
-    //   const oldFilePath = path.join(process.cwd(), 'public', oldAvatarUrl);
-    //   await unlink(oldFilePath).catch(err => console.log('Failed to delete old avatar:', err));
-    // }
 
     // Log activity
     await ActivityLog.create({
       userId: userId,
       action: 'profile_photo_removed',
-      details: { previousUrl: oldAvatarUrl },
+      details: { previousUrl: oldAvatarUrl || 'none' },
       ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
       userAgent: request.headers.get('user-agent'),
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: "Profile photo removed successfully",
       user: user.sanitizeForResponse()
     });
 
+    return setCorsHeaders(response);
+
   } catch (error) {
     console.error("Profile photo removal error:", error);
-    return NextResponse.json(
+    const response = NextResponse.json(
       { success: false, error: "Failed to remove profile photo" },
       { status: 500 }
     );
+    return setCorsHeaders(response);
   }
 }
