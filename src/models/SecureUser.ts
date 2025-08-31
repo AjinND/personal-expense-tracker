@@ -31,18 +31,65 @@ interface UserModel extends Model<IUser, {}, IUserMethods> {
 
 type UserDocument = HydratedDocument<IUser, IUserMethods>;
 
+// Helper function to validate avatar URL
+const validateAvatarUrl = (url: string): boolean => {
+  if (!url) return true; // Allow empty values
+  
+  // Check if it's a base64 data URL
+  if (url.startsWith('data:image/')) {
+    const base64Pattern = /^data:image\/(jpeg|jpg|png|gif);base64,[A-Za-z0-9+/]+=*$/;
+    return base64Pattern.test(url);
+  }
+  
+  try {
+    // Check if it's a valid URL
+    const parsed = new URL(url);
+    
+    // Allow local development paths
+    if (url.startsWith('/uploads/avatars/')) {
+      return /^\/uploads\/avatars\/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|gif)$/i.test(url);
+    }
+    
+    // Allow common cloud storage providers
+    const allowedDomains = [
+      'cloudinary.com',
+      'res.cloudinary.com', 
+      'amazonaws.com',
+      's3.amazonaws.com',
+      'supabase.co',
+      'storage.googleapis.com',
+      'firebasestorage.googleapis.com',
+      'imgix.net',
+      'cdn.jsdelivr.net'
+    ];
+    
+    const hostname = parsed.hostname.toLowerCase();
+    const isAllowedDomain = allowedDomains.some(domain => 
+      hostname === domain || hostname.endsWith(`.${domain}`)
+    );
+    
+    if (!isAllowedDomain) {
+      return false;
+    }
+    
+    // Check for valid image extensions in the path
+    const validExtensions = /\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i;
+    return validExtensions.test(parsed.pathname) || parsed.pathname.includes('image') || parsed.pathname.includes('upload');
+    
+  } catch (error) {
+    // If URL parsing fails, check if it's a local path
+    return /^\/uploads\/avatars\/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|gif)$/i.test(url);
+  }
+};
+
 const UserSchema = new Schema<IUser, UserModel, IUserMethods>(
   {
     avatar: {
       type: String,
       default: undefined,
       validate: {
-        validator: function(v: string) {
-          if (!v) return true; // Allow empty values
-          // Validate URL format for avatar
-          return /^\/uploads\/avatars\/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|gif)$/i.test(v);
-        },
-        message: 'Invalid avatar URL format'
+        validator: validateAvatarUrl,
+        message: 'Invalid avatar URL format. Must be a valid image URL, base64 data URL, or local path.'
       }
     },
     name: {

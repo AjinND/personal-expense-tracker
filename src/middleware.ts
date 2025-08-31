@@ -1,4 +1,4 @@
-// src/middleware.ts
+// src/middleware.ts - FIXED
 import { NextRequest, NextResponse } from 'next/server';
 import { getClientIdentifier } from '@/lib/rate-limit';
 
@@ -14,20 +14,20 @@ const SECURITY_HEADERS = {
   'X-Permitted-Cross-Domain-Policies': 'none',
 };
 
-// CSP policy for production
+// CSP policy for production - FIXED to allow Cloudinary
 const CSP_POLICY = process.env.NODE_ENV === 'production' 
-  ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'"
-  : "default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ws: wss:";
+  ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: https://*.cloudinary.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https: https://*.cloudinary.com"
+  : "default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ws: wss: https:; img-src 'self' data: https: https://*.cloudinary.com;";
 
-// Rate limiting configuration
+// Rate limiting configuration - UPDATED for file uploads
 const RATE_LIMITS = {
-  '/api/auth': { requests: 5, window: 15 * 60 * 1000 }, // 5 requests per 15 minutes
-  '/api/auth/session': { requests: 20, window: 15 * 60 * 1000 }, // Increased to 20 for session checks
-  '/api/profile/photo': { requests: 10, window: 60 * 60 * 1000 }, // 10 requests per hour
-  '/api/expenses': { requests: 200, window: 60 * 1000 }, // Increased to 200 requests per minute
-  '/api/budget': { requests: 100, window: 60 * 1000 }, // Increased to 100 requests per minute
-  '/api/dashboard': { requests: 200, window: 60 * 1000 }, // Increased to 200 requests per minute
-  default: { requests: 200, window: 60 * 1000 }, // Increased default limit
+  '/api/auth': { requests: 5, window: 15 * 60 * 1000 },
+  '/api/auth/session': { requests: 20, window: 15 * 60 * 1000 },
+  '/api/profile/photo': { requests: 3, window: 60 * 60 * 1000 }, // 3 uploads per hour
+  '/api/expenses': { requests: 200, window: 60 * 1000 },
+  '/api/budget': { requests: 100, window: 60 * 1000 },
+  '/api/dashboard': { requests: 200, window: 60 * 1000 },
+  default: { requests: 200, window: 60 * 1000 },
 };
 
 // Simple in-memory rate limiting (use Redis in production)
@@ -74,7 +74,7 @@ setInterval(() => {
       rateLimitStore.delete(key);
     }
   }
-}, 5 * 60 * 1000); // Clean up every 5 minutes
+}, 5 * 60 * 1000);
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -86,12 +86,6 @@ export function middleware(request: NextRequest) {
     pathname.includes('.') ||
     pathname === '/favicon.ico'
   ) {
-    return NextResponse.next();
-  }
-
-  // Handle file upload routes with larger body size
-  if (pathname === '/api/profile/photo') {
-    // Skip body size validation for file uploads
     return NextResponse.next();
   }
 
@@ -114,70 +108,7 @@ export function middleware(request: NextRequest) {
     );
   }
 
-  // Apply rate limiting to API routes
-  if (pathname.startsWith('/api') && pathname !== '/api/health') {
-    const clientId = getClientIdentifier(request);
-    
-    if (!checkRateLimit(clientId, pathname)) {
-      return new NextResponse(
-        JSON.stringify({
-          success: false,
-          error: 'Too many requests. Please try again later.',
-          code: 'RATE_LIMIT_EXCEEDED'
-        }),
-        {
-          status: 429,
-          headers: {
-            'Content-Type': 'application/json',
-            'Retry-After': '900',
-            ...SECURITY_HEADERS
-          }
-        }
-      );
-    }
-
-    // Add request size limit for API routes
-    const contentLength = request.headers.get('content-length');
-    if (contentLength && parseInt(contentLength) > 10 * 1024) { // 10KB limit
-      return new NextResponse(
-        JSON.stringify({
-          success: false,
-          error: 'Request body too large',
-          code: 'PAYLOAD_TOO_LARGE'
-        }),
-        {
-          status: 413,
-          headers: {
-            'Content-Type': 'application/json',
-            ...SECURITY_HEADERS
-          }
-        }
-      );
-    }
-
-    // Validate Content-Type for POST/PUT/PATCH requests
-    if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
-      const contentType = request.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        return new NextResponse(
-          JSON.stringify({
-            success: false,
-            error: 'Invalid Content-Type. Expected application/json',
-            code: 'INVALID_CONTENT_TYPE'
-          }),
-          {
-            status: 400,
-            headers: {
-              'Content-Type': 'application/json',
-              ...SECURITY_HEADERS
-            }
-          }
-        );
-      }
-    }
-  }
-
-  // Handle CORS for API routes
+  // Handle CORS for API routes - IMPROVED
   if (pathname.startsWith('/api')) {
     const origin = request.headers.get('origin');
     const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
@@ -185,8 +116,12 @@ export function middleware(request: NextRequest) {
       'https://localhost:3000'
     ];
 
-    if (origin && allowedOrigins.includes(origin)) {
+    // Allow same-origin requests
+    if (origin && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
       response.headers.set('Access-Control-Allow-Origin', origin);
+    } else if (!origin) {
+      // Allow requests without origin (same-origin)
+      response.headers.set('Access-Control-Allow-Origin', '*');
     }
 
     response.headers.set('Access-Control-Allow-Credentials', 'true');
@@ -214,6 +149,97 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  // Apply rate limiting to API routes
+  if (pathname.startsWith('/api') && pathname !== '/api/health') {
+    const clientId = getClientIdentifier(request);
+    
+    if (!checkRateLimit(clientId, pathname)) {
+      return new NextResponse(
+        JSON.stringify({
+          success: false,
+          error: 'Too many requests. Please try again later.',
+          code: 'RATE_LIMIT_EXCEEDED'
+        }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': '900',
+            'Access-Control-Allow-Origin': '*',
+            ...SECURITY_HEADERS
+          }
+        }
+      );
+    }
+
+    // UPDATED: Skip body size limit for file upload routes
+    if (pathname === '/api/profile/photo') {
+      // Allow larger payloads for file uploads (up to 10MB)
+      const contentLength = request.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) {
+        return new NextResponse(
+          JSON.stringify({
+            success: false,
+            error: 'File too large. Maximum size is 5MB.',
+            code: 'FILE_TOO_LARGE'
+          }),
+          {
+            status: 413,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              ...SECURITY_HEADERS
+            }
+          }
+        );
+      }
+      // Don't validate content-type for multipart/form-data uploads
+      return response;
+    }
+
+    // Add request size limit for other API routes
+    const contentLength = request.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 10 * 1024) { // 10KB limit for JSON
+      return new NextResponse(
+        JSON.stringify({
+          success: false,
+          error: 'Request body too large',
+          code: 'PAYLOAD_TOO_LARGE'
+        }),
+        {
+          status: 413,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            ...SECURITY_HEADERS
+          }
+        }
+      );
+    }
+
+    // Validate Content-Type for POST/PUT/PATCH requests (except file uploads)
+    if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
+      const contentType = request.headers.get('content-type');
+      if (!contentType || (!contentType.includes('application/json') && !contentType.includes('multipart/form-data'))) {
+        return new NextResponse(
+          JSON.stringify({
+            success: false,
+            error: 'Invalid Content-Type. Expected application/json or multipart/form-data',
+            code: 'INVALID_CONTENT_TYPE'
+          }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              ...SECURITY_HEADERS
+            }
+          }
+        );
+      }
+    }
+  }
+
   // Block suspicious requests
   const userAgent = request.headers.get('user-agent') || '';
   const suspiciousPatterns = [
@@ -224,7 +250,6 @@ export function middleware(request: NextRequest) {
     /hack/i,
     /sql/i,
     /injection/i,
-    /script/i,
     /<script/i,
     /javascript:/i,
     /vbscript:/i,
@@ -249,6 +274,7 @@ export function middleware(request: NextRequest) {
         status: 403,
         headers: {
           'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
           ...SECURITY_HEADERS
         }
       }
