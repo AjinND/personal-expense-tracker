@@ -1,7 +1,7 @@
 // src/components/dashboard/CategoryCards.tsx
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Music, Plane, ShoppingCart, Utensils, Plus, TrendingUp } from "lucide-react";
 import {
@@ -19,10 +19,9 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import EnhancedDatePicker from "@/components/ui/enhanced-date-picker";
+import EnhancedDatePicker, { EnhancedDatePickerRef } from "@/components/ui/enhanced-date-picker";
 import { 
   CategoryCardsProps,
-  CategoryTotals, 
   ExpenseCategory 
 } from "@/types/dashboard";
 import { 
@@ -63,7 +62,13 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
     entertainment: { isOpen: false, amount: "", date: new Date(), isSubmitting: false, error: "" },
   });
 
-  const maxCategoryValue = Math.max(...Object.values(categoryTotals));
+  // Create refs for each category's date picker
+  const datePickerRefs = useRef<Record<ExpenseCategory, EnhancedDatePickerRef | null>>({
+    food: null,
+    shopping: null,
+    travelling: null,
+    entertainment: null,
+  });
 
   const updateDialogState = useCallback((
     category: ExpenseCategory, 
@@ -85,8 +90,19 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
     });
   }, [updateDialogState]);
 
-  const closeDialog = useCallback((category: ExpenseCategory) => {
-    updateDialogState(category, { isOpen: false });
+  const handleDialogOpenChange = useCallback((category: ExpenseCategory, open: boolean) => {
+    if (open) {
+      updateDialogState(category, { isOpen: true });
+    } else {
+      // Ensure date picker is closed when dialog closes
+      if (datePickerRefs.current[category]) {
+        datePickerRefs.current[category]?.close();
+      }
+      // Delay closing the dialog to allow popover state update and cleanup
+      setTimeout(() => {
+        updateDialogState(category, { isOpen: false });
+      }, 100);
+    }
   }, [updateDialogState]);
 
   const handleAmountChange = useCallback((category: ExpenseCategory, value: string) => {
@@ -131,14 +147,20 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
         state.date.toLocaleDateString("en-CA")
       );
       
-      // Reset and close dialog on success
-      updateDialogState(category, {
-        isOpen: false,
-        amount: "",
-        date: new Date(),
-        error: "",
-        isSubmitting: false
-      });
+      // Close date picker and delay dialog close for popover cleanup
+      if (datePickerRefs.current[category]) {
+        datePickerRefs.current[category]?.close();
+      }
+      
+      setTimeout(() => {
+        updateDialogState(category, {
+          isOpen: false,
+          amount: "",
+          date: new Date(),
+          error: "",
+          isSubmitting: false
+        });
+      }, 100);
     } catch (error) {
       updateDialogState(category, {
         error: "Failed to add expense. Please try again.",
@@ -148,6 +170,7 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
   }, [dialogStates, validateForm, onAddExpense, updateDialogState]);
 
   const getCategoryProgress = (value: number): number => {
+    const maxCategoryValue = Math.max(...Object.values(categoryTotals));
     return maxCategoryValue > 0 ? (value / maxCategoryValue) * 100 : 0;
   };
 
@@ -217,7 +240,7 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
                 
                 <Dialog 
                   open={dialogState.isOpen} 
-                  onOpenChange={(open) => open ? openDialog(categoryKey) : closeDialog(categoryKey)}
+                  onOpenChange={(open) => handleDialogOpenChange(categoryKey, open)}
                 >
                   <DialogTrigger asChild>
                     <Button
@@ -245,7 +268,7 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
                     </Button>
                   </DialogTrigger>
                   
-                  <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+                  <DialogContent className="sm:max-w-lg overflow-visible">
                     <DialogHeader>
                       <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
                         {IconComponent && (
@@ -291,6 +314,9 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
                           Expense Date
                         </Label>
                         <EnhancedDatePicker
+                          ref={(el) => {
+                            if (el) datePickerRefs.current[categoryKey] = el;
+                          }}
                           value={dialogState.date}
                           onChange={(date) => handleDateChange(categoryKey, date)}
                           disabled={dialogState.isSubmitting}
@@ -305,7 +331,7 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
                         </Alert>
                       )}
 
-                      {/* Preview - More compact on mobile */}
+                      {/* Preview */}
                       {dialogState.amount && parseFloat(dialogState.amount) > 0 && (
                         <div className="bg-gray-50 p-3 sm:p-4 rounded-lg border">
                           <div className="text-sm font-medium text-gray-700 mb-2">
@@ -349,7 +375,14 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
                         className="w-full sm:w-auto min-w-[120px] order-1 sm:order-2"
                         style={{ backgroundColor: CATEGORY_COLORS[categoryKey] }}
                       >
-                        {dialogState.isSubmitting ? "Adding..." : "Add Expense"}
+                        {dialogState.isSubmitting ? (
+                          <>
+                            <span className="mr-2">Adding...</span>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          </>
+                        ) : (
+                          'Add Expense'
+                        )}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -357,26 +390,22 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
               </div>
             </CardHeader>
             
-            <CardContent className="space-y-4">
-              {/* Amount */}
-              <div className="space-y-2">
-                <div 
-                  className="text-2xl sm:text-3xl font-bold transition-colors duration-200"
-                  style={{ color: CATEGORY_COLORS[categoryKey] }}
-                >
+            <CardContent className="pb-4">
+              {/* Amount Display */}
+              <div className="mb-3">
+                <p className="text-2xl font-bold text-gray-900">
                   {formatCurrency(total)}
-                </div>
-                
-                {/* Growth indicator */}
-                <div className="flex items-center justify-between text-xs">
-                  <span className={cn("font-medium flex items-center gap-1", growthColor)}>
-                    <TrendingUp className={cn("h-3 w-3", growth.startsWith('+') ? 'text-red-500' : 'text-green-500 rotate-180')} />
-                    {growth} vs last month
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={cn("text-xs font-medium flex items-center gap-1", growthColor)}>
+                    <TrendingUp className="h-3 w-3" />
+                    {growth}
                   </span>
+                  <span className="text-xs text-gray-500">vs last month</span>
                 </div>
               </div>
               
-              {/* Progress visualization */}
+              {/* Progress Bar */}
               <div className="space-y-2">
                 <Progress 
                   value={progress} 
@@ -395,15 +424,11 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
                   </span>
                 </div>
               </div>
-
-              {/* Quick stats */}
-              <div className="pt-2 border-t border-gray-100">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-gray-500">This period</span>
-                  <span className="font-medium text-gray-700">
-                    {total > 0 ? `${Math.round(total / (maxCategoryValue || 1) * 100)}% of spending` : 'Start tracking'}
-                  </span>
-                </div>
+              
+              {/* Quick Stats */}
+              <div className="flex justify-between items-center text-xs text-gray-500">
+                <span>{Math.round(progress)}% of highest</span>
+                <span className="font-medium">{total > 0 ? `${Math.floor(total / 30)} txns` : 'No expenses'}</span>
               </div>
             </CardContent>
           </Card>
