@@ -47,16 +47,6 @@ const updateExpenseSchema = z.object({
   }, "At least one field must be updated"),
 });
 
-// const queryParamsSchema = z.object({
-//   startDate: z.string().regex(VALIDATION_CONSTANTS.DATE_FORMAT).optional(),
-//   endDate: z.string().regex(VALIDATION_CONSTANTS.DATE_FORMAT).optional(),
-//   category: z.enum(['food', 'shopping', 'travelling', 'entertainment']).optional(),
-//   limit: z.coerce.number().min(1).max(VALIDATION_CONSTANTS.MAX_LIMIT).optional(),
-//   offset: z.coerce.number().min(0).optional(),
-//   sortBy: z.enum(['date', 'total', 'createdAt']).optional(),
-//   sortOrder: z.enum(['asc', 'desc']).optional(),
-// });
-
 const queryParamsSchema = z.object({
   startDate: z.string().regex(VALIDATION_CONSTANTS.DATE_FORMAT).optional().transform(val => val || undefined),
   endDate: z.string().regex(VALIDATION_CONSTANTS.DATE_FORMAT).optional().transform(val => val || undefined),
