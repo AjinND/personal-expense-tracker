@@ -40,6 +40,11 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0rem;
+
+    --dashboard-bg-overlay: rgba(255, 254, 249, 0.95);
+    --dashboard-card-bg: rgba(255, 248, 231, 0.98);
+    --dashboard-accent: #8b4513;
+    --dashboard-text: #2c1810;
   }
 }
 
@@ -916,56 +921,148 @@
 
   /* Dashboard-specific retro styles */
   .dashboard-page-bg {
-    @apply min-h-screen relative overflow-x-hidden;
+    @apply min-h-screen relative overflow-hidden;
     background: 
-        /* Subtle paper texture instead of heavy wood grain */ radial-gradient(
-        circle at 20% 80%,
-        rgba(255, 248, 231, 0.3) 0%,
-        transparent 50%
+      /* Scratches overlay */ repeating-linear-gradient(
+        45deg,
+        transparent 0px,
+        rgba(255, 255, 255, 0.02) 1px,
+        transparent 2px
       ),
-      radial-gradient(
-        circle at 80% 20%,
-        rgba(255, 235, 59, 0.1) 0%,
-        transparent 50%
-      ),
-      radial-gradient(
-        circle at 40% 40%,
-        rgba(200, 230, 201, 0.2) 0%,
-        transparent 50%
-      ),
-      /* Very light wood-like base that doesn't interfere */
+      /* Wood grain texture */
+        repeating-linear-gradient(
+          90deg,
+          var(--desk-wood) 0px,
+          #a0522d 2px,
+          var(--desk-wood) 4px,
+          #804000 6px,
+          var(--desk-wood) 8px
+        ),
+      /* Base wood color with depth */
         linear-gradient(
-          135deg,
-          #fffef9 0%,
-          #fff8e7 25%,
-          #fffef9 50%,
-          #f4f4f4 75%,
-          #fffef9 100%
+          180deg,
+          var(--desk-wood) 0%,
+          #804000 50%,
+          var(--desk-wood) 100%
         );
-  }
-
-  /* Ledger book styling for dashboard cards */
-  .ledger-book {
-    background: var(
-      --paper-white
-    ); /* Use white instead of cream for better contrast */
-    border: 3px solid var(--rubber-stamp);
-    border-radius: 8px;
-    box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.2),
-      /* Softer shadow */ inset 0 0 0 2px var(--ledger-lines),
-      inset 0 20px 0 var(--typewriter-red);
-    position: relative;
 
     &::before {
       content: "";
       position: absolute;
-      top: 0;
-      left: 80px;
-      width: 2px;
-      height: 100%;
-      background: var(--typewriter-red);
-      opacity: 0.5; /* More subtle */
+      inset: 0;
+      background: radial-gradient(
+        ellipse at center,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0.3) 100%
+      );
+      pointer-events: none;
     }
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        circle at 50% 20%,
+        rgba(255, 248, 220, 0.4) 0%,
+        transparent 60%
+      );
+      pointer-events: none;
+    }
+  }
+
+  /* Ledger book styling for dashboard cards */
+  .ledger-book {
+    background: linear-gradient(
+      to bottom,
+      var(--paper-white) 0%,
+      var(--paper-cream) 100%
+    );
+    border: 3px solid var(--rubber-stamp);
+    border-radius: 8px;
+    box-shadow: 
+      /* Main shadow */
+      4px 4px 12px rgba(0, 0, 0, 0.3),
+      /* Inner light for depth */
+      inset 0 1px 0 rgba(255, 255, 255, 0.8),
+      /* Paper stack effect */
+      0 0 0 1px var(--paper-aged),
+      1px 1px 0 2px var(--paper-aged),
+      2px 2px 0 3px var(--paper-aged);
+    position: relative;
+    
+    /* Add coffee stain */
+    &::before {
+      content: "";
+      position: absolute;
+      top: -10px;
+      right: 20px;
+      width: 60px;
+      height: 60px;
+      background: radial-gradient(
+        ellipse at center,
+        rgba(139, 69, 19, 0.1) 0%,
+        rgba(139, 69, 19, 0.05) 40%,
+        transparent 70%
+      );
+      border-radius: 50%;
+      transform: rotate(25deg);
+    }
+  }
+
+  /* Enhanced manila folder */
+  .manila-folder {
+    background: linear-gradient(
+      135deg,
+      var(--manila-folder) 0%,
+      #c7b5a8 100%
+    );
+    border: 2px solid #9e8b7e;
+    border-radius: 0 8px 8px 8px;
+    position: relative;
+    
+    /* Folder tab */
+    &::before {
+      content: "EXPENSES";
+      position: absolute;
+      top: -30px;
+      left: 20px;
+      background: var(--manila-folder);
+      padding: 5px 20px;
+      border: 2px solid #9e8b7e;
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      font-family: 'Special Elite', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+    }
+  }
+
+  /* Paper lift effect on hover */
+  .ledger-book:hover,
+  .manila-folder:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+      6px 6px 16px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    transition: all 0.2s ease;
+  }
+
+  /* Stamp press animation for buttons */
+  .rubber-stamp-btn:active {
+    transform: translateY(2px) rotate(-1deg);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Paper rustle sound effect visual */
+  @keyframes paper-rustle {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-0.5deg); }
+    75% { transform: rotate(0.5deg); }
+  }
+
+  .ledger-book:hover .paper-clip {
+    animation: paper-rustle 0.3s ease-in-out;
   }
 
   /* Ledger lines for writing areas */
@@ -980,36 +1077,6 @@
     );
     background-size: 100% 30px;
     position: relative;
-  }
-
-  /* Category cards as manila folders */
-  .manila-folder {
-    background: #f5f5dc; /* Lighter beige */
-    border: 2px solid #a0a0a0; /* Lighter border */
-    border-radius: 12px 12px 0 0;
-    box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.15),
-      /* Softer shadow */ inset 0 -2px 0 rgba(0, 0, 0, 0.05);
-    position: relative;
-    transform: perspective(500px) rotateX(2deg); /* Less dramatic angle */
-    transition: all 0.3s ease;
-
-    &:hover {
-      transform: perspective(500px) rotateX(0deg) translateY(-2px);
-      box-shadow: 3px 4px 12px rgba(0, 0, 0, 0.2);
-    }
-
-    &::before {
-      content: "";
-      position: absolute;
-      top: -8px;
-      left: 20px;
-      width: 60px;
-      height: 16px;
-      background: #f5f5dc;
-      border: 2px solid #a0a0a0;
-      border-bottom: none;
-      border-radius: 8px 8px 0 0;
-    }
   }
 
   /* Chart containers as graph paper */
@@ -1280,4 +1347,16 @@ form {
   .desk-decoration {
     opacity: 0.6;
   }
+}
+
+/* Apply overlay to main content area */
+.dashboard-content-wrapper {
+  background: var(--dashboard-bg-overlay);
+  backdrop-filter: blur(2px);
+  border-radius: 12px;
+  margin: 20px;
+  padding: 20px;
+  box-shadow: 
+    0 0 40px rgba(0, 0, 0, 0.2),
+    inset 0 0 40px rgba(255, 255, 255, 0.1);
 }
